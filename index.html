@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debian Package Neglect Explorer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #0d1117;
+  color: #c9d1d9;
+}
+
+header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #21262d;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+header .controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  font-size: 13px;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.controls select, .controls input[type="range"] {
+  background: #161b22;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.controls select:focus { outline: 1px solid #58a6ff; }
+
+#chart-container {
+  display: flex;
+  height: calc(100vh - 53px);
+}
+
+#plot-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#plot-area svg {
+  display: block;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 340px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.tooltip.show { opacity: 1; }
+.tooltip .pkg-name { font-weight: 600; color: #e6edf3; font-size: 14px; }
+.tooltip .pkg-maint { color: #8b949e; font-size: 11px; }
+.tooltip .pkg-stat { color: #c9d1d9; }
+.tooltip .pkg-stat b { color: #e6edf3; }
+.tooltip a { color: #58a6ff; text-decoration: none; }
+.tooltip a:hover { text-decoration: underline; }
+
+#sidebar {
+  width: 340px;
+  border-left: 1px solid #21262d;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+}
+
+#sidebar-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #21262d;
+  font-size: 13px;
+  color: #8b949e;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#sidebar-header .count { color: #e6edf3; font-weight: 600; }
+
+#package-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+#package-list ul {
+  list-style: none;
+}
+
+#package-list li {
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+#package-list li:hover { background: #161b22; }
+#package-list li .name { color: #58a6ff; }
+#package-list li .meta { color: #484f58; font-size: 11px; white-space: nowrap; }
+
+.legend {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 12px;
+  z-index: 10;
+}
+
+.legend-title { font-weight: 600; margin-bottom: 6px; color: #e6edf3; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: #8b949e; }
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+
+.quadrant-label {
+  font-size: 11px;
+  fill: #30363d;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.axis text { fill: #8b949e; font-size: 11px; }
+.axis line, .axis path { stroke: #21262d; }
+.grid line { stroke: #161b22; stroke-dasharray: 2,4; }
+.grid path { stroke: none; }
+.brush .selection { fill: #58a6ff; fill-opacity: 0.15; stroke: #58a6ff; stroke-width: 1; }
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #8b949e;
+  z-index: 200;
+}
+
+#no-data {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #8b949e;
+}
+
+#no-data h2 { color: #e6edf3; font-size: 18px; }
+#no-data code {
+  background: #161b22;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Debian Neglect Explorer</h1>
+  <div class="controls">
+    <label>
+      Y-axis
+      <select id="y-axis-select">
+        <option value="days_since_upload" selected>Days Since Upload</option>
+        <option value="oldest_rc_bug_age">Oldest RC Bug Age</option>
+      </select>
+    </label>
+    <label>
+      <input type="checkbox" id="hide-no-bugs" checked>
+      Hide zero-bug packages
+    </label>
+    <label>
+      Min popcon vote
+      <input type="range" id="min-vote" min="0" max="500" value="0" step="10">
+      <span id="min-vote-val">0</span>
+    </label>
+  </div>
+</header>
+
+<div id="chart-container">
+  <div id="plot-area">
+    <div id="loading">Loading data&hellip;</div>
+    <div id="no-data">
+      <h2>No data loaded</h2>
+      <p>Run <code>python3 fetch_data.py</code> to generate <code>data/packages.json</code>.</p>
+    </div>
+  </div>
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <span>Matching packages</span>
+      <span class="count" id="match-count">0</span>
+    </div>
+    <div id="package-list"><ul></ul></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA_URL = "data/packages.json";
+const MARGIN = { top: 40, right: 30, bottom: 60, left: 70 };
+
+let allData = [];
+let yField = "days_since_upload";
+let hideNoBugs = true;
+let minVote = 0;
+let selectedRegion = null;
+
+const svg = d3.select("#plot-area").append("svg");
+const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
+
+const xScale = d3.scaleLog();
+const yScale = d3.scaleLog();
+const rScale = d3.scaleSqrt();
+
+const xAxisG = g.append("g").attr("class", "axis x-axis");
+const yAxisG = g.append("g").attr("class", "axis y-axis");
+const gridX = g.append("g").attr("class", "grid x-grid");
+const gridY = g.append("g").attr("class", "grid y-grid");
+
+const quadrantG = g.append("g").attr("class", "quadrants");
+const quadrantLabels = g.append("g").attr("class", "quadrant-labels");
+
+const pointsG = g.append("g").attr("class", "points");
+const brushG = g.append("g").attr("class", "brush");
+
+const tooltip = document.getElementById("tooltip");
+
+const xAxisLabel = g.append("text")
+  .attr("class", "axis-label")
+  .attr("text-anchor", "middle")
+  .attr("fill", "#8b949e")
+  .attr("font-size", 12)
+  .text("Popcon vote (log)");
+
+const yAxisLabel = g.append("text")
+  .attr("class", "axis-label")
+  .attr("text-anchor", "middle")
+  .attr("fill", "#8b949e")
+  .attr("font-size", 12)
+  .attr("transform", "rotate(-90)")
+  .text("Days since upload (log)");
+
+const legendDiv = d3.select("#plot-area").append("div").attr("class", "legend");
+legendDiv.html(`
+  <div class="legend-title">Quadrants</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#f85149"></span> Popular &amp; neglected</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#3fb950"></span> Popular &amp; active</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#d29922"></span> Niche &amp; neglected</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span> Niche &amp; active</div>
+`);
+
+const brush = d3.brush()
+  .on("start brush end", onBrush);
+
+brushG.call(brush);
+
+function onBrush(event) {
+  if (!event.selection) {
+    selectedRegion = null;
+    updateSidebar();
+    pointsG.selectAll("circle").attr("opacity", 1);
+    return;
+  }
+  const [[x0, y0], [x1, y1]] = event.selection;
+  selectedRegion = { x0, y0, x1, y1 };
+  updateSidebar();
+}
+
+function getFiltered() {
+  return allData.filter(d => {
+    if (d[yField] == null || d[yField] <= 0) return false;
+    if (hideNoBugs && d.rc_bug_count === 0) return false;
+    if (d.vote < minVote) return false;
+    return true;
+  });
+}
+
+function updateSidebar() {
+  const data = getFiltered();
+  const list = document.querySelector("#package-list ul");
+  const countEl = document.getElementById("match-count");
+
+  let matched = data;
+  if (selectedRegion) {
+    matched = data.filter(d => {
+      const cx = xScale(d.vote);
+      const cy = yScale(d[yField]);
+      return cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
+             cy >= selectedRegion.y0 && cy <= selectedRegion.y1;
+    });
+  }
+
+  matched.sort((a, b) => b.vote - a.vote);
+
+  countEl.textContent = matched.length;
+  list.innerHTML = matched.slice(0, 500).map(d => {
+    const yVal = d[yField];
+    const yDisplay = yField === "days_since_upload"
+      ? `${Math.round(yVal)}d`
+      : `${Math.round(yVal)}d`;
+    return `<li data-source="${d.source}">
+      <span class="name">${d.source}</span>
+      <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
+    </li>`;
+  }).join("");
+
+  list.querySelectorAll("li").forEach(li => {
+    li.addEventListener("click", () => {
+      const src = li.dataset.source;
+      window.open(`https://tracker.debian.org/package/${src}`, "_blank");
+    });
+  });
+
+  pointsG.selectAll("circle")
+    .attr("opacity", d => {
+      if (!selectedRegion) return 1;
+      const cx = xScale(d.vote);
+      const cy = yScale(d[yField]);
+      return (cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
+              cy >= selectedRegion.y0 && cy <= selectedRegion.y1) ? 1 : 0.12;
+    });
+}
+
+function median(arr) {
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function render() {
+  const plotArea = document.getElementById("plot-area");
+  const W = plotArea.clientWidth;
+  const H = plotArea.clientHeight;
+
+  svg.attr("width", W).attr("height", H);
+
+  const innerW = W - MARGIN.left - MARGIN.right;
+  const innerH = H - MARGIN.top - MARGIN.bottom;
+
+  g.select(".brush").call(brush.move, null);
+  selectedRegion = null;
+
+  const data = getFiltered();
+  if (data.length === 0) {
+    pointsG.selectAll("circle").remove();
+    xAxisG.selectAll("*").remove();
+    yAxisG.selectAll("*").remove();
+    gridX.selectAll("*").remove();
+    gridY.selectAll("*").remove();
+    quadrantG.selectAll("*").remove();
+    quadrantLabels.selectAll("*").remove();
+    updateSidebar();
+    return;
+  }
+
+  const votes = data.map(d => d.vote).filter(v => v > 0);
+  const yVals = data.map(d => d[yField]).filter(v => v > 0);
+
+  xScale.domain(d3.extent(votes)).range([0, innerW]).clamp(true);
+  yScale.domain(d3.extent(yVals)).range([innerH, 0]).clamp(true);
+
+  const maxInst = d3.max(data, d => d.insts) || 1;
+  rScale.domain([0, maxInst]).range([1.5, 8]);
+
+  xAxisG.attr("transform", `translate(0,${innerH})`)
+    .call(d3.axisBottom(xScale).ticks(6, "~s").tickSizeOuter(0));
+  yAxisG.call(d3.axisLeft(yScale).ticks(6, "~s").tickSizeOuter(0));
+
+  gridX.attr("transform", `translate(0,${innerH})`)
+    .call(d3.axisBottom(xScale).ticks(6).tickSize(-innerH).tickFormat(""));
+  gridY.call(d3.axisLeft(yScale).ticks(6).tickSize(-innerW).tickFormat(""));
+
+  xAxisLabel.attr("x", innerW / 2).attr("y", innerH + 48);
+  const yLabel = yField === "days_since_upload"
+    ? "Days since upload (log)"
+    : "Oldest RC bug age (log)";
+  yAxisLabel.text(yLabel).attr("x", -innerH / 2).attr("y", -52);
+
+  const xMed = median(votes);
+  const yMed = median(yVals);
+
+  quadrantG.selectAll("*").remove();
+  quadrantG.append("line")
+    .attr("x1", xScale(xMed)).attr("x2", xScale(xMed))
+    .attr("y1", 0).attr("y2", innerH)
+    .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+  quadrantG.append("line")
+    .attr("x1", 0).attr("x2", innerW)
+    .attr("y1", yScale(yMed)).attr("y2", yScale(yMed))
+    .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+
+  quadrantLabels.selectAll("*").remove();
+  const qlabels = [
+    { x: (xScale(xMed) + innerW) / 2, y: yScale(yMed) / 2, text: "NEGLECTED" },
+    { x: (xScale(xMed) + innerW) / 2, y: (yScale(yMed) + innerH) / 2, text: "ACTIVE" },
+    { x: xScale(xMed) / 2, y: yScale(yMed) / 2, text: "" },
+    { x: xScale(xMed) / 2, y: (yScale(yMed) + innerH) / 2, text: "" },
+  ];
+  qlabels.filter(q => q.text).forEach(q => {
+    quadrantLabels.append("text")
+      .attr("class", "quadrant-label")
+      .attr("x", q.x).attr("y", q.y)
+      .text(q.text);
+  });
+
+  const color = d => {
+    const highPop = d.vote >= xMed;
+    const stale = d[yField] >= yMed;
+    if (highPop && stale) return "#f85149";
+    if (highPop && !stale) return "#3fb950";
+    if (!highPop && stale) return "#d29922";
+    return "#58a6ff";
+  };
+
+  const circles = pointsG.selectAll("circle").data(data, d => d.source);
+
+  circles.exit().remove();
+
+  circles.enter()
+    .append("circle")
+    .attr("r", d => rScale(d.insts))
+    .attr("cx", d => xScale(d.vote))
+    .attr("cy", d => yScale(d[yField]))
+    .attr("fill", color)
+    .attr("fill-opacity", 0.7)
+    .attr("stroke", color)
+    .attr("stroke-width", 0.5)
+    .attr("stroke-opacity", 0.3)
+    .style("cursor", "pointer")
+    .on("mouseenter", showTooltip)
+    .on("mousemove", moveTooltip)
+    .on("mouseleave", hideTooltip)
+    .on("click", (ev, d) => {
+      window.open(`https://tracker.debian.org/package/${d.source}`, "_blank");
+    })
+    .merge(circles)
+    .attr("r", d => rScale(d.insts))
+    .attr("cx", d => xScale(d.vote))
+    .attr("cy", d => yScale(d[yField]))
+    .attr("fill", color)
+    .attr("stroke", color);
+
+  updateSidebar();
+}
+
+function showTooltip(ev, d) {
+  const yVal = d[yField];
+  const yLabel = yField === "days_since_upload" ? "Days since upload" : "Oldest RC bug age";
+  const lines = [
+    `<div class="pkg-name">${d.source}</div>`,
+    `<div class="pkg-maint">${d.maintainer || ""}</div>`,
+    `<div class="pkg-stat"><b>${d.vote}</b> popcon votes &middot; <b>${d.insts.toLocaleString()}</b> installs</div>`,
+    `<div class="pkg-stat"><b>${Math.round(yVal)}</b> ${yLabel.toLowerCase()}</div>`,
+    d.rc_bug_count > 0
+      ? `<div class="pkg-stat"><b>${d.rc_bug_count}</b> open RC bug${d.rc_bug_count > 1 ? "s" : ""}</div>`
+      : "",
+    d.last_upload_version
+      ? `<div class="pkg-stat">Last: <b>${d.last_upload_version}</b> (${d.last_upload_date ? new Date(d.last_upload_date).toLocaleDateString() : "?"})</div>`
+      : "",
+    d.vcs_status ? `<div class="pkg-stat">VCS: ${d.vcs_status}</div>` : "",
+    `<div class="pkg-stat"><a href="https://tracker.debian.org/package/${d.source}" target="_blank">tracker.debian.org &rarr;</a></div>`,
+  ].filter(Boolean).join("");
+  tooltip.innerHTML = lines;
+  tooltip.classList.add("show");
+  moveTooltip(ev);
+}
+
+function moveTooltip(ev) {
+  let x = ev.pageX + 14;
+  let y = ev.pageY - 10;
+  const tw = tooltip.offsetWidth;
+  const th = tooltip.offsetHeight;
+  if (x + tw > window.innerWidth - 10) x = ev.pageX - tw - 14;
+  if (y + th > window.innerHeight - 10) y = ev.pageY - th - 10;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+}
+
+function hideTooltip() {
+  tooltip.classList.remove("show");
+}
+
+document.getElementById("y-axis-select").addEventListener("change", function () {
+  yField = this.value;
+  render();
+});
+
+document.getElementById("hide-no-bugs").addEventListener("change", function () {
+  hideNoBugs = this.checked;
+  render();
+});
+
+document.getElementById("min-vote").addEventListener("input", function () {
+  minVote = +this.value;
+  document.getElementById("min-vote-val").textContent = minVote;
+  render();
+});
+
+window.addEventListener("resize", render);
+
+d3.json(DATA_URL).then(data => {
+  document.getElementById("loading").style.display = "none";
+  if (!data || !data.packages || data.packages.length === 0) {
+    document.getElementById("no-data").style.display = "flex";
+    return;
+  }
+  allData = data.packages;
+  render();
+}).catch(() => {
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("no-data").style.display = "flex";
+});
+</script>
+</body>
+</html>
