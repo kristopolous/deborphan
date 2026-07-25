@@ -175,8 +175,10 @@ header .controls {
   opacity: 0;
   transition: opacity 0.15s;
 }
-
 .tooltip.show { opacity: 1; }
+@media (pointer: coarse) {
+  .tooltip.show { pointer-events: auto; }
+}
 .tooltip .pkg-name { font-weight: 600; color: #e6edf3; font-size: 14px; }
 .tooltip .pkg-maint { color: #8b949e; font-size: 11px; }
 .tooltip .pkg-stat { color: #c9d1d9; }
@@ -341,8 +343,11 @@ footer a:hover {
   .controls label { font-size: 12px; }
   .controls select, .controls input[type="range"] { font-size: 12px; padding: 3px 6px; }
   .guide-popover {
-    width: calc(100vw - 48px);
-    left: -8px;
+    position: fixed;
+    top: 60px;
+    left: 12px;
+    right: 12px;
+    width: auto;
   }
   #sidebar { display: none; }
   .legend { bottom: 12px; left: 12px; padding: 8px 12px; font-size: 11px; }
@@ -434,6 +439,7 @@ let selectedRegion = null;
 let searchQuery = "";
 let dotSizeMultiplier = 1;
 let currentTransform = d3.zoomIdentity;
+const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
 
 const svg = d3.select("#plot-area").append("svg");
 const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
@@ -519,7 +525,13 @@ document.addEventListener("keyup", e => {
     g.select(".brush").call(brush.move, null);
     selectedRegion = null;
     brushG.style("display", "none");
-    svg.call(zoom);
+svg.call(zoom);
+
+svg.on("click", function (ev) {
+  if (isTouchDevice && ev.target.tagName === "svg") {
+    hideTooltip();
+  }
+});
     svg.style("cursor", null);
     updateSidebar();
   }
@@ -800,11 +812,16 @@ function render(resetZoom) {
     .attr("stroke-width", 0.5)
     .attr("stroke-opacity", 0.3)
     .style("cursor", "pointer")
-    .on("mouseenter", showTooltip)
-    .on("mousemove", moveTooltip)
-    .on("mouseleave", hideTooltip)
+    .on("mouseenter", isTouchDevice ? null : showTooltip)
+    .on("mousemove", isTouchDevice ? null : moveTooltip)
+    .on("mouseleave", isTouchDevice ? null : hideTooltip)
     .on("click", (ev, d) => {
-      window.open(`https://tracker.debian.org/pkg/${d.source}`, "_blank");
+      if (isTouchDevice) {
+        showTooltip(ev, d);
+        ev.stopPropagation();
+      } else {
+        window.open(`https://tracker.debian.org/pkg/${d.source}`, "_blank");
+      }
     })
     .merge(circles)
     .attr("r", d => rScale(d.insts))
@@ -902,8 +919,14 @@ fetch(DATA_URL).then(resp => {
   function pump() {
     return reader.read().then(({ done, value }) => {
       if (done) {
-        const text = new TextDecoder().decode(new Uint8Array(received));
-        return JSON.parse(text);
+        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+        const buf = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const chunk of chunks) {
+          buf.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return JSON.parse(new TextDecoder().decode(buf));
       }
       chunks.push(value);
       received += value.length;
