@@ -45,7 +45,7 @@ The pipeline compares Debian versions against multiple external sources to find 
 | FreeBSD Ports | ~38k | BSD ports tree |
 | Homebrew | ~8.5k | macOS package manager |
 | pkgsrc | ~20k | NetBSD package collection |
-| Repology | per-query | Aggregates nix, Void, Fedora rawhide, openSUSE Tumbleweed, Chimera, Alpine, Gentoo, etc. |
+| Repology | per-query | Aggregates nix, Void, Fedora rawhide, openSUSE Tumbleweed, Chimera, Alpine edge, Gentoo, Slackware, OpenBSD, etc. |
 
 Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume:
 
@@ -78,6 +78,7 @@ The comparison framework is extensible — see `comparisons/` directory to add n
 - Dot size: number of open RC bugs (bigger = more bugs)
 - Quadrant dividers at the median (neglected, active, etc.)
 - Hover tooltips showing installs, votes, version info, bugs, maintainer, VCS status
+- Tooltip is interactive — click the tracker link inside it
 - Click dot to open tracker.debian.org/pkg/{name} (or use tooltip link on mobile)
 - Y-axis toggle: three metrics available
 - Hide zero-bug packages (on by default)
