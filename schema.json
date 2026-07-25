@@ -81,13 +81,25 @@
             "type": ["string", "null"],
             "description": "Normalized upstream portion of the Arch version. Null if not found."
           },
+          "homebrew_version": {
+            "type": ["string", "null"],
+            "description": "Full Homebrew package version. Null if not found on Homebrew."
+          },
+          "homebrew_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the Homebrew version. Null if not found."
+          },
           "behind_upstream": {
-            "type": ["boolean", "null"],
-            "description": "True if Arch's upstream version is newer than Debian's. Null if incomparable."
+            "type": "boolean",
+            "description": "True if any comparison source has a newer upstream version than Debian."
           },
           "version_delta": {
             "type": ["number", "null"],
-            "description": "How far behind Debian is, in semver distance: major*100 + minor*10 + patch. Null if incomparable or date-based versions."
+            "description": "How far behind Debian is from the best comparison, in semver distance: major*100 + minor*10 + patch. Null if no source is newer or versions can't be compared."
+          },
+          "best_comparison": {
+            "type": ["string", "null"],
+            "description": "Which source provided the best (largest) version delta: 'arch' or 'homebrew'. Null if behind_upstream is false."
           }
         }
       }

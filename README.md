@@ -1,6 +1,6 @@
 # Debian Neglect Explorer
 
-An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux to identify packages genuinely behind upstream.
+An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux and Homebrew to identify packages genuinely behind upstream.
 
 ## Quick Start
 
@@ -26,8 +26,8 @@ Requires `psql` (PostgreSQL client) to query the UDD mirror:
 # 1. Fetch Debian data from UDD
 .venv/bin/python fetch_data.py
 
-# 2. Fetch Arch Linux package database
-.venv/bin/python fetch_arch.py
+# 2. Fetch version data from comparison sources (Arch, Homebrew)
+.venv/bin/python -m comparisons.fetch_all
 
 # 3. Merge and precompute final dataset
 .venv/bin/python build.py
@@ -35,9 +35,27 @@ Requires `psql` (PostgreSQL client) to query the UDD mirror:
 
 This produces `data/packages.json` with all fields precomputed. The output schema is documented in `schema.json`.
 
+### Comparison Sources
+
+The pipeline compares Debian versions against multiple external sources to find packages behind upstream:
+
+| Source | Packages | Notes |
+|--------|----------|-------|
+| Arch Linux | ~15k | Tracks upstream closely |
+| Homebrew | ~8.5k | macOS package manager, tracks upstream |
+
+Run `python -m comparisons.fetch_all --list` to see all available sources.
+
+To fetch only specific sources:
+```bash
+.venv/bin/python -m comparisons.fetch_all --sources arch homebrew
+```
+
 ## How It Works
 
-The pipeline compares Debian package versions against Arch Linux (which tracks upstream closely) to compute a **version delta** — how many semver versions behind Debian is. This distinguishes packages that are genuinely neglected (behind upstream) from those that are simply old (upstream is also stagnant).
+The pipeline compares Debian package versions against external sources (Arch Linux, Homebrew) to compute a **version delta** — how many semver versions behind Debian is. This distinguishes packages that are genuinely neglected (behind upstream) from those that are simply old (upstream is also stagnant).
+
+The comparison framework is extensible — see `comparisons/` directory to add new sources.
 
 ## Features
 
@@ -65,8 +83,12 @@ The pipeline compares Debian package versions against Arch Linux (which tracks u
 ```
 index.html                 Single-page D3 scatter plot (HTML + CSS + JS)
 fetch_data.py              Queries UDD via psql -> data/packages_raw.json
-fetch_arch.py              Downloads Arch DB -> data/arch_versions.json
-build.py                   Merges both -> data/packages.json
+build.py                   Merges data -> data/packages.json
+comparisons/               Version comparison framework
+  __init__.py                Shared utilities + base class
+  arch.py                    Arch Linux source
+  homebrew.py                Homebrew source
+  fetch_all.py               Fetch from all sources
 generate_sample_data.py    Generates fake data for development
 schema.json                Output schema for data/packages.json
 pyproject.toml             Python project config
