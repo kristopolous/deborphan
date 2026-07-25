@@ -527,10 +527,11 @@ document.addEventListener("keyup", e => {
     brushG.style("display", "none");
 svg.call(zoom);
 
-svg.on("click", function (ev) {
-  if (isTouchDevice && ev.target.tagName !== "circle") {
-    hideTooltip();
-  }
+document.addEventListener("pointerdown", function (ev) {
+  if (!isTouchDevice) return;
+  if (!tooltip.classList.contains("show")) return;
+  if (ev.target.closest(".tooltip") || ev.target.tagName === "circle") return;
+  hideTooltip();
 });
     svg.style("cursor", null);
     updateSidebar();
