@@ -23,14 +23,16 @@ python3 -m http.server 8080
 Requires `psql` (PostgreSQL client) to query the UDD mirror:
 
 ```bash
-# 1. Fetch Debian data from UDD
-.venv/bin/python fetch_data.py
+# Full pipeline (fetch + build)
+.venv/bin/python run.py
 
-# 2. Fetch version data from comparison sources (Arch, FreeBSD, Homebrew, pkgsrc, Repology)
-.venv/bin/python -m comparisons.fetch_all
+# Or step by step:
+.venv/bin/python fetch_data.py              # 1. Fetch Debian data from UDD
+.venv/bin/python -m comparisons.fetch_all   # 2. Fetch version data from comparison sources
+.venv/bin/python build.py                   # 3. Merge and precompute final dataset
 
-# 3. Merge and precompute final dataset
-.venv/bin/python build.py
+# With Repology (top 500 most popular packages)
+.venv/bin/python run.py --repology 500
 ```
 
 This produces `data/packages.json` with all fields precomputed. The output schema is documented in `schema.json`.
@@ -95,6 +97,7 @@ The comparison framework is extensible — see `comparisons/` directory to add n
 ## Files
 
 ```
+run.py                     Full pipeline entry point (fetch + build)
 index.html                 Single-page D3 scatter plot (HTML + CSS + JS)
 fetch_data.py              Queries UDD via psql -> data/packages_raw.json
 build.py                   Merges data -> data/packages.json

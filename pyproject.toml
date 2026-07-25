@@ -10,5 +10,6 @@ dependencies = [
 
 [project.scripts]
 fetch-udd = "fetch_data:main"
-fetch-arch = "fetch_arch:main"
+fetch-sources = "comparisons.fetch_all:main"
 build = "build:main"
+neglect = "run:main"
