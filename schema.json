@@ -105,6 +105,10 @@
             "type": ["string", "null"],
             "description": "Normalized upstream portion of the pkgsrc version. Null if not found."
           },
+          "repology_version": {
+            "type": ["string", "null"],
+            "description": "Best upstream version from Repology fast repos (nix, Void, Arch, Fedora rawhide, etc.). Null if not found."
+          },
           "behind_upstream": {
             "type": "boolean",
             "description": "True if any comparison source has a newer upstream version than Debian."
@@ -115,7 +119,7 @@
           },
           "best_comparison": {
             "type": ["string", "null"],
-            "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', 'homebrew', or 'pkgsrc'. Null if behind_upstream is false."
+            "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', 'homebrew', 'pkgsrc', or 'repology'. Null if behind_upstream is false."
           }
         }
       }

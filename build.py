@@ -18,9 +18,10 @@ from comparisons.arch import ArchSource
 from comparisons.freebsd import FreebsdSource
 from comparisons.homebrew import HomebrewSource
 from comparisons.pkgsrc import PkgsrcSource
+from comparisons.repology import RepologySource
 
 
-SOURCES = [ArchSource(), FreebsdSource(), HomebrewSource(), PkgsrcSource()]
+SOURCES = [ArchSource(), FreebsdSource(), HomebrewSource(), PkgsrcSource(), RepologySource()]
 
 
 def build():

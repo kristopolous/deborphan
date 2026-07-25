@@ -1,6 +1,6 @@
 # Debian Neglect Explorer
 
-An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux, FreeBSD Ports, Homebrew, and pkgsrc to identify packages genuinely behind upstream.
+An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux, FreeBSD Ports, Homebrew, pkgsrc, and Repology to identify packages genuinely behind upstream.
 
 ## Quick Start
 
@@ -45,6 +45,17 @@ The pipeline compares Debian versions against multiple external sources to find 
 | FreeBSD Ports | ~38k | BSD ports tree |
 | Homebrew | ~8.5k | macOS package manager |
 | pkgsrc | ~20k | NetBSD package collection |
+| Repology | per-query | Aggregates nix, Void, Fedora rawhide, openSUSE Tumbleweed, Chimera, Alpine, Gentoo, etc. |
+
+Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume:
+
+```bash
+# Query top 500 most popular packages
+.venv/bin/python -m comparisons.repology --limit 500
+
+# Resume from where you left off (default)
+.venv/bin/python -m comparisons.repology
+```
 
 Run `python -m comparisons.fetch_all --list` to see all available sources.
 
@@ -92,6 +103,7 @@ comparisons/               Version comparison framework
   freebsd.py                 FreeBSD Ports source
   homebrew.py                Homebrew source
   pkgsrc.py                  pkgsrc (NetBSD) source
+  repology.py                Repology (re-entrant per-query)
   fetch_all.py               Fetch from all sources
 generate_sample_data.py    Generates fake data for development
 schema.json                Output schema for data/packages.json
