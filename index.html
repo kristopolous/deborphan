@@ -312,6 +312,29 @@ footer a {
 footer a:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 768px) {
+  header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  header h1 { font-size: 15px; }
+  header .controls {
+    width: 100%;
+    gap: 8px;
+  }
+  #search { width: 100%; font-size: 16px; }
+  .controls label { font-size: 12px; }
+  .controls select, .controls input[type="range"] { font-size: 12px; padding: 3px 6px; }
+  .guide-popover {
+    width: calc(100vw - 48px);
+    left: -8px;
+  }
+  #sidebar { display: none; }
+  .legend { bottom: 12px; left: 12px; padding: 8px 12px; font-size: 11px; }
+  .zoom-hint { display: none; }
+  footer { padding: 10px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -845,6 +868,14 @@ document.getElementById("search").addEventListener("input", function () {
 });
 
 window.addEventListener("resize", render);
+
+document.getElementById("guide-btn").addEventListener("click", function (e) {
+  e.stopPropagation();
+  document.getElementById("guide-popover").classList.toggle("open");
+});
+document.addEventListener("click", function () {
+  document.getElementById("guide-popover").classList.remove("open");
+});
 
 d3.json(DATA_URL).then(data => {
   document.getElementById("loading").style.display = "none";
