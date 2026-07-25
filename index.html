@@ -28,6 +28,13 @@ header h1 {
   font-weight: 600;
   color: #e6edf3;
 }
+header h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+header h1 a:hover {
+  color: #58a6ff;
+}
 
 header .controls {
   display: flex;
@@ -227,12 +234,26 @@ header .controls {
   border-radius: 4px;
   font-size: 13px;
 }
+footer {
+  text-align: center;
+  padding: 16px;
+  color: #8b949e;
+  font-size: 12px;
+  border-top: 1px solid #21262d;
+}
+footer a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+footer a:hover {
+  text-decoration: underline;
+}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Debian Neglect Explorer</h1>
+  <h1><a href="https://github.com/kristopolous/deborphan" target="_blank">Debian Neglect Explorer</a></h1>
   <div class="controls">
     <input type="text" id="search" placeholder="Search packages&hellip;" autocomplete="off" spellcheck="false">
     <label>
@@ -754,5 +775,8 @@ d3.json(DATA_URL).then(data => {
   document.getElementById("no-data").style.display = "flex";
 });
 </script>
+<footer>
+  <p>Source code available on <a href="https://github.com/kristopolous/deborphan" target="_blank">GitHub</a>. Licensed under the <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank">GNU General Public License v3.0</a>.</p>
+</footer>
 </body>
 </html>
