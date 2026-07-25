@@ -528,7 +528,7 @@ document.addEventListener("keyup", e => {
 svg.call(zoom);
 
 svg.on("click", function (ev) {
-  if (isTouchDevice && ev.target.tagName === "svg") {
+  if (isTouchDevice && ev.target.tagName !== "circle") {
     hideTooltip();
   }
 });
