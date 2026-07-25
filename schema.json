@@ -97,6 +97,14 @@
             "type": ["string", "null"],
             "description": "Normalized upstream portion of the FreeBSD version. Null if not found."
           },
+          "pkgsrc_version": {
+            "type": ["string", "null"],
+            "description": "Full pkgsrc package version. Null if not found on pkgsrc."
+          },
+          "pkgsrc_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the pkgsrc version. Null if not found."
+          },
           "behind_upstream": {
             "type": "boolean",
             "description": "True if any comparison source has a newer upstream version than Debian."
@@ -107,7 +115,7 @@
           },
           "best_comparison": {
             "type": ["string", "null"],
-            "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', or 'homebrew'. Null if behind_upstream is false."
+            "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', 'homebrew', or 'pkgsrc'. Null if behind_upstream is false."
           }
         }
       }

@@ -13,12 +13,14 @@ import sys
 from comparisons.arch import ArchSource
 from comparisons.freebsd import FreebsdSource
 from comparisons.homebrew import HomebrewSource
+from comparisons.pkgsrc import PkgsrcSource
 
 
 SOURCES = [
     ArchSource(),
     FreebsdSource(),
     HomebrewSource(),
+    PkgsrcSource(),
 ]
 
 

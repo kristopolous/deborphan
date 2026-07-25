@@ -17,9 +17,10 @@ from comparisons import parse_debian_upstream, to_semver, compute_version_delta
 from comparisons.arch import ArchSource
 from comparisons.freebsd import FreebsdSource
 from comparisons.homebrew import HomebrewSource
+from comparisons.pkgsrc import PkgsrcSource
 
 
-SOURCES = [ArchSource(), FreebsdSource(), HomebrewSource()]
+SOURCES = [ArchSource(), FreebsdSource(), HomebrewSource(), PkgsrcSource()]
 
 
 def build():
