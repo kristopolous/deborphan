@@ -490,6 +490,7 @@ let searchQuery = "";
 const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
 let dotSizeMultiplier = isTouchDevice ? 0.5 : 0.8;
 let currentTransform = d3.zoomIdentity;
+let tooltipHideTimer = null;
 
 const svg = d3.select("#plot-area").append("svg");
 const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
@@ -518,6 +519,8 @@ const pointsG = clipG.append("g").attr("class", "points");
 const brushG = zoomG.append("g").attr("class", "brush");
 
 const tooltip = document.getElementById("tooltip");
+tooltip.addEventListener("mouseenter", () => clearTimeout(tooltipHideTimer));
+tooltip.addEventListener("mouseleave", () => { if (!isTouchDevice) tooltipHideTimer = setTimeout(hideTooltip, 300); });
 
 const xAxisLabel = g.append("text")
   .attr("class", "axis-label")
@@ -554,7 +557,6 @@ brushG.style("display", "none");
 
 const zoom = d3.zoom()
   .scaleExtent([1, 100])
-  .filter(ev => ev.target.tagName !== "circle")
   .on("zoom", onZoom);
 
 svg.call(zoom);
@@ -579,9 +581,8 @@ document.addEventListener("keyup", e => {
 svg.call(zoom);
 
 document.addEventListener("pointerdown", function (ev) {
-  if (!isTouchDevice) return;
   if (!tooltip.classList.contains("show")) return;
-  if (ev.target.closest(".tooltip") || ev.target.tagName === "circle") return;
+  if (ev.target.closest(".tooltip") || ev.target.closest("circle")) return;
   hideTooltip();
 });
     svg.style("cursor", null);
@@ -871,9 +872,9 @@ function render(resetZoom) {
     .attr("stroke-width", 0.5)
     .attr("stroke-opacity", 0.3)
     .style("cursor", "pointer")
-    .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); if (!isTouchDevice) showTooltip(ev, d); })
+    .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); clearTimeout(tooltipHideTimer); if (!isTouchDevice) showTooltip(ev, d); })
     .on("mousemove", isTouchDevice ? null : moveTooltip)
-    .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) hideTooltip(); })
+    .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) tooltipHideTimer = setTimeout(hideTooltip, 300); })
     .on("click", (ev, d) => {
       markVisited(d3.select(this));
       if (isTouchDevice) {
