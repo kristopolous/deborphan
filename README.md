@@ -1,6 +1,6 @@
 # Debian Neglect Explorer
 
-An interactive D3 scatter plot that maps Debian source packages by popularity (popcon votes) vs. staleness (days since upload, RC bug age), with drill-down links to tracker.debian.org.
+An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness (days since upload, RC bug age), with drill-down links to tracker.debian.org.
 
 ## Quick Start
 
@@ -27,19 +27,22 @@ This connects to `udd-mirror.debian.net` and writes `data/packages.json`.
 ## Features
 
 - Log-log scatter plot, one dot per source package
-- Quadrant dividers with median-based lines (neglected, active, etc.)
-- Hover tooltips showing popcon vote, installs, days since upload, RC bugs, maintainer, VCS status, tracker link
+- X-axis: install count (how widely deployed)
+- Y-axis: days since last upload or oldest open RC bug age
+- Dot size: number of open RC bugs (bigger = more bugs)
+- Quadrant dividers at the median (neglected, active, etc.)
+- Hover tooltips showing installs, votes, days since upload, bugs, maintainer, VCS status
 - Click any dot to open tracker.debian.org/pkg/{name}
 - Y-axis toggle: days since upload or oldest RC bug age
 - Hide zero-bug packages (on by default)
-- Min vote slider to filter low-popularity packages
+- Min installs slider to filter low-deployment packages
 - Dot size multiplier slider
-- Search with regex support (try `^alsa`, `alac|7zip`, etc.)
+- Search with regex support (try `^alsa$`, `alac|7zip`, etc.)
 - Search finds packages across all data regardless of filters
 - Source package names resolve to binary names (e.g. rust-alacritty shows as alacritty)
 - Scroll-wheel zoom and drag-to-pan, axes extend beyond data range
 - Shift+drag brush-select to filter the package list
-- Sidebar lists matching packages with vote/staleness stats
+- Sidebar lists matching packages with install/staleness stats
 - Dark theme (GitHub-dark style)
 
 ## Files

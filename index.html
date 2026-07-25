@@ -377,9 +377,9 @@ footer a:hover {
     <button class="guide-btn" id="guide-btn">Guide</button>
     <div class="guide-popover" id="guide-popover">
       <h3>What is this?</h3>
-      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how popular it is (x-axis, popcon votes from low on the left to high on the right) and how stale it is (y-axis, days since last upload or oldest open RC bug, with older/staler at the top).</p>
+      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how widely installed it is (x-axis, install count from low on the left to high on the right) and how stale it is (y-axis, days since last upload or oldest open RC bug, with older/staler at the top). Dot size indicates number of open RC bugs: bigger dot = more bugs.</p>
       <h3>What are the quadrants?</h3>
-      <p>The dashed lines split the plot at the median, creating four zones: <b>Popular &amp; Neglected</b> (high votes, long neglect) are the most urgent; <b>Popular &amp; Active</b> are well-maintained; <b>Niche &amp; Neglected</b> are low-traffic and stale; <b>Niche &amp; Active</b> are small but cared for.</p>
+      <p>The dashed lines split the plot at the median, creating four zones: <b>Widely installed &amp; Neglected</b> (high installs, long neglect) are the most urgent; <b>Widely installed &amp; Active</b> are well-maintained; <b>Niche &amp; Neglected</b> are low-install and stale; <b>Niche &amp; Active</b> are small but cared for.</p>
       <h3>How to use it</h3>
       <ul>
         <li><b>Hover</b> any dot for details (votes, installs, bugs, maintainer, VCS status).</li>
@@ -388,8 +388,8 @@ footer a:hover {
         <li><b>Shift+drag</b> to brush-select a region. The sidebar lists only those packages.</li>
         <li><b>Search</b> by package name. Accepts regex: <code>^alsa$</code> for exact, <code>alac|7zip</code> for multiple.</li>
         <li><b>Y-axis</b> switches between days since upload and oldest RC bug age.</li>
-        <li><b>Min vote</b> slider filters out low-popularity packages.</li>
-        <li><b>Dot size</b> slider adjusts circle radii by install count.</li>
+        <li><b>Min installs</b> slider filters out low-install packages.</li>
+        <li><b>Dot size</b> slider scales circles by number of open RC bugs.</li>
       </ul>
     </div>
   </div>
@@ -413,7 +413,7 @@ footer a:hover {
         <span id="dot-size-val">1x</span>
       </label>
       <label>
-        Min vote
+        Min installs
         <input type="range" id="min-vote" min="0" max="500" value="0" step="10">
         <span id="min-vote-val">0</span>
       </label>
@@ -469,6 +469,7 @@ function selectCircle(circle) {
       .attr("stroke-opacity", 1);
   }
 }
+let searchQuery = "";
 let dotSizeMultiplier = 1;
 let currentTransform = d3.zoomIdentity;
 const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
@@ -519,8 +520,8 @@ const yAxisLabel = g.append("text")
 const legendDiv = d3.select("#plot-area").append("div").attr("class", "legend");
 legendDiv.html(`
   <div class="legend-title">Quadrants</div>
-  <div class="legend-item"><span class="legend-dot" style="background:#f85149"></span> Popular &amp; neglected</div>
-  <div class="legend-item"><span class="legend-dot" style="background:#3fb950"></span> Popular &amp; active</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#f85149"></span> Widely installed &amp; neglected</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#3fb950"></span> Widely installed &amp; active</div>
   <div class="legend-item"><span class="legend-dot" style="background:#d29922"></span> Niche &amp; neglected</div>
   <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span> Niche &amp; active</div>
 `);
@@ -591,6 +592,7 @@ function applyZoom() {
   const t = currentTransform;
   const iw = innerW();
   const ih = innerH();
+  if (iw <= 0 || ih <= 0) return;
   const k = t.k;
 
   d3.select(`#${clipId} rect`)
@@ -656,10 +658,10 @@ function innerH() {
 function getFiltered() {
   return allData.filter(d => {
     if (d[yField] == null || d[yField] <= 0) return false;
-    if (d.vote <= 0) return false;
+    if (d.insts <= 0) return false;
     if (searchQuery && matchesSearch(d)) return true;
     if (hideNoBugs && d.rc_bug_count === 0) return false;
-    if (d.vote < minVote) return false;
+    if (d.insts < minVote) return false;
     return true;
   });
 }
@@ -689,7 +691,7 @@ function updateSidebar() {
       const yDisplay = yVal != null ? `${Math.round(yVal)}d` : "n/a";
       return `<li data-source="${d.source}">
         <span class="name">${d.display_name || d.source}</span>
-        <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
+        <span class="meta">${d.insts.toLocaleString()} installs &middot; ${yDisplay}</span>
       </li>`;
     }).join("");
 
@@ -706,7 +708,7 @@ function updateSidebar() {
     let matched = data;
     if (selectedRegion) {
       matched = data.filter(d => {
-        const cx = xScale(d.vote);
+        const cx = xScale(d.insts);
         const cy = yScale(d[yField]);
         return cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
                cy >= selectedRegion.y0 && cy <= selectedRegion.y1;
@@ -721,7 +723,7 @@ function updateSidebar() {
       const yDisplay = `${Math.round(yVal)}d`;
       return `<li data-source="${d.source}">
         <span class="name">${d.display_name || d.source}</span>
-        <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
+        <span class="meta">${d.insts.toLocaleString()} installs &middot; ${yDisplay}</span>
       </li>`;
     }).join("");
 
@@ -735,7 +737,7 @@ function updateSidebar() {
     pointsG.selectAll("circle")
       .attr("opacity", d => {
         if (!selectedRegion) return 1;
-        const cx = xScale(d.vote);
+        const cx = xScale(d.insts);
         const cy = yScale(d[yField]);
         return (cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
                 cy >= selectedRegion.y0 && cy <= selectedRegion.y1) ? 1 : 0.12;
@@ -755,6 +757,7 @@ function render(resetZoom) {
   const plotArea = document.getElementById("plot-area");
   const W = plotArea.clientWidth;
   const H = plotArea.clientHeight;
+  if (W <= 0 || H <= 0) return;
 
   svg.attr("width", W).attr("height", H);
 
@@ -822,7 +825,7 @@ function render(resetZoom) {
     .attr("x", (xScale(xMed) + iw) / 2).attr("y", (yScale(yMed) + ih) / 2).text("ACTIVE");
 
   const color = d => {
-    const highPop = d.vote >= xMed;
+    const highPop = d.insts >= xMed;
     const stale = d[yField] >= yMed;
     if (highPop && stale) return "#f85149";
     if (highPop && !stale) return "#3fb950";
@@ -836,8 +839,8 @@ function render(resetZoom) {
 
   circles.enter()
     .append("circle")
-    .attr("r", d => rScale(d.insts))
-    .attr("cx", d => xScale(d.vote))
+    .attr("r", d => rScale(d.rc_bug_count))
+    .attr("cx", d => xScale(d.insts))
     .attr("cy", d => yScale(d[yField]))
     .attr("fill", color)
     .attr("fill-opacity", 0.7)
@@ -857,8 +860,8 @@ function render(resetZoom) {
       }
     })
     .merge(circles)
-    .attr("r", d => rScale(d.insts))
-    .attr("cx", d => xScale(d.vote))
+    .attr("r", d => rScale(d.rc_bug_count))
+    .attr("cx", d => xScale(d.insts))
     .attr("cy", d => yScale(d[yField]))
     .attr("fill", color)
     .attr("stroke", color);
@@ -873,7 +876,7 @@ function showTooltip(ev, d) {
     `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
     `<div class="pkg-name">${d.display_name || d.source}</div>`,
     `<div class="pkg-maint">${d.maintainer || ""}</div>`,
-    `<div class="pkg-stat"><b>${d.vote}</b> popcon votes &middot; <b>${d.insts.toLocaleString()}</b> installs</div>`,
+    `<div class="pkg-stat"><b>${d.insts.toLocaleString()}</b> installs &middot; <b>${d.vote}</b> popcon votes</div>`,
     `<div class="pkg-stat"><b>${Math.round(yVal)}</b> ${yLabel.toLowerCase()}</div>`,
     d.rc_bug_count > 0
       ? `<div class="pkg-stat"><b>${d.rc_bug_count}</b> open RC bug${d.rc_bug_count > 1 ? "s" : ""}</div>`
@@ -924,9 +927,9 @@ document.getElementById("dot-size").addEventListener("input", function () {
   dotSizeMultiplier = +this.value;
   document.getElementById("dot-size-val").textContent = dotSizeMultiplier.toFixed(1) + "x";
   const data = getFiltered();
-  const maxInst = d3.max(data, d => d.insts) || 1;
-  rScale.domain([0, maxInst]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
-  pointsG.selectAll("circle").attr("r", d => rScale(d.insts));
+  const maxBugs = d3.max(data, d => d.rc_bug_count) || 1;
+  rScale.domain([0, maxBugs]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
+  pointsG.selectAll("circle").attr("r", d => rScale(d.rc_bug_count));
 });
 
 document.getElementById("search").addEventListener("input", function () {
@@ -946,36 +949,8 @@ document.addEventListener("click", function () {
 
 const loadingEl = document.getElementById("loading");
 fetch(DATA_URL).then(resp => {
-  const contentLength = +resp.headers.get("Content-Length") || 0;
-  const reader = resp.body.getReader();
-  const chunks = [];
-  let received = 0;
-  function pump() {
-    return reader.read().then(({ done, value }) => {
-      if (done) {
-        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-        const buf = new Uint8Array(totalLen);
-        let offset = 0;
-        for (const chunk of chunks) {
-          buf.set(chunk, offset);
-          offset += chunk.length;
-        }
-        return JSON.parse(new TextDecoder().decode(buf));
-      }
-      chunks.push(value);
-      received += value.length;
-      if (contentLength) {
-        const pct = Math.round(received / contentLength * 100);
-        const mb = (received / 1048576).toFixed(1);
-        const total = (contentLength / 1048576).toFixed(1);
-        loadingEl.textContent = `Loading data\u2026 ${mb}/${total} MB (${pct}%)`;
-      } else {
-        loadingEl.textContent = `Loading data\u2026 ${(received / 1048576).toFixed(1)} MB`;
-      }
-      return pump();
-    });
-  }
-  return pump();
+  if (!resp.ok) throw new Error(resp.status);
+  return resp.json();
 }).then(data => {
   loadingEl.style.display = "none";
   if (!data || !data.packages || data.packages.length === 0) {
