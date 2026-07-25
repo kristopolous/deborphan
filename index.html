@@ -185,6 +185,19 @@ header .controls {
 .tooltip .pkg-stat b { color: #e6edf3; }
 .tooltip a { color: #58a6ff; text-decoration: none; }
 .tooltip a:hover { text-decoration: underline; }
+.tooltip-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+.tooltip-close:hover { color: #e6edf3; }
 
 #sidebar {
   width: 340px;
@@ -364,7 +377,7 @@ footer a:hover {
     <button class="guide-btn" id="guide-btn">Guide</button>
     <div class="guide-popover" id="guide-popover">
       <h3>What is this?</h3>
-      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how popular it is (x-axis, popcon votes) and how stale it is (y-axis, days since last upload or oldest open RC bug).</p>
+      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how popular it is (x-axis, popcon votes from low on the left to high on the right) and how stale it is (y-axis, days since last upload or oldest open RC bug, with older/staler at the top).</p>
       <h3>What are the quadrants?</h3>
       <p>The dashed lines split the plot at the median, creating four zones: <b>Popular &amp; Neglected</b> (high votes, long neglect) are the most urgent; <b>Popular &amp; Active</b> are well-maintained; <b>Niche &amp; Neglected</b> are low-traffic and stale; <b>Niche &amp; Active</b> are small but cared for.</p>
       <h3>How to use it</h3>
@@ -436,7 +449,26 @@ let yField = "days_since_upload";
 let hideNoBugs = true;
 let minVote = 0;
 let selectedRegion = null;
-let searchQuery = "";
+let selectedCircle = null;
+
+function selectCircle(circle) {
+  if (selectedCircle) {
+    const d = selectedCircle.datum();
+    const origColor = d._origStroke || "#58a6ff";
+    selectedCircle
+      .attr("stroke", origColor)
+      .attr("stroke-width", 0.5)
+      .attr("stroke-opacity", 0.3);
+  }
+  selectedCircle = circle;
+  if (selectedCircle) {
+    selectedCircle._origStroke = selectedCircle.attr("stroke");
+    selectedCircle
+      .attr("stroke", "#ffffff")
+      .attr("stroke-width", 2)
+      .attr("stroke-opacity", 1);
+  }
+}
 let dotSizeMultiplier = 1;
 let currentTransform = d3.zoomIdentity;
 const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
@@ -579,7 +611,7 @@ function applyZoom() {
     .call(d3.axisBottom(xScale).ticks(Math.max(3, Math.round(6 * k))).tickSize(-ih).tickFormat(""));
   gridY.call(d3.axisLeft(yScale).ticks(Math.max(3, Math.round(6 * k))).tickSize(-iw).tickFormat(""));
 
-  const xMed = median(getFiltered().map(d => d.vote).filter(v => v > 0));
+  const xMed = median(getFiltered().map(d => d.insts).filter(v => v > 0));
   const yMed = median(getFiltered().map(d => d[yField]).filter(v => v > 0));
   const xMedPx = xScale(xMed);
   const yMedPx = yScale(yMed);
@@ -747,14 +779,14 @@ function render(resetZoom) {
     return;
   }
 
-  const votes = data.map(d => d.vote).filter(v => v > 0);
+  const installs = data.map(d => d.insts).filter(v => v > 0);
   const yVals = data.map(d => d[yField]).filter(v => v > 0);
 
-  xScale.domain(d3.extent(votes)).range([0, iw]);
+  xScale.domain(d3.extent(installs)).range([0, iw]);
   yScale.domain(d3.extent(yVals)).range([ih, 0]);
 
-  const maxInst = d3.max(data, d => d.insts) || 1;
-  rScale.domain([0, maxInst]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
+  const maxBugs = d3.max(data, d => d.rc_bug_count) || 1;
+  rScale.domain([0, maxBugs]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
 
   xAxisG.attr("transform", `translate(0,${ih})`)
     .call(d3.axisBottom(xScale).ticks(6, "~s").tickSizeOuter(0));
@@ -764,13 +796,13 @@ function render(resetZoom) {
     .call(d3.axisBottom(xScale).ticks(6).tickSize(-ih).tickFormat(""));
   gridY.call(d3.axisLeft(yScale).ticks(6).tickSize(-iw).tickFormat(""));
 
-  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48);
+  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48).text("Installs (log)");
   const yLabel = yField === "days_since_upload"
     ? "Days since upload (log)"
     : "Oldest RC bug age (log)";
   yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52);
 
-  const xMed = median(votes);
+  const xMed = median(installs);
   const yMed = median(yVals);
 
   quadrantG.selectAll("*").remove();
@@ -838,6 +870,7 @@ function showTooltip(ev, d) {
   const yVal = d[yField];
   const yLabel = yField === "days_since_upload" ? "Days since upload" : "Oldest RC bug age";
   const lines = [
+    `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
     `<div class="pkg-name">${d.display_name || d.source}</div>`,
     `<div class="pkg-maint">${d.maintainer || ""}</div>`,
     `<div class="pkg-stat"><b>${d.vote}</b> popcon votes &middot; <b>${d.insts.toLocaleString()}</b> installs</div>`,
