@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Debian Package Neglect Explorer",
+  "description": "Precomputed package data for the neglect explorer scatter plot.",
+  "type": "object",
+  "required": ["fetched_at", "package_count", "packages"],
+  "properties": {
+    "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when UDD data was fetched."
+    },
+    "package_count": {
+      "type": "integer",
+      "description": "Total number of packages in the array."
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "display_name", "insts", "vote"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Debian source package name."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Binary or human-readable package name for display."
+          },
+          "insts": {
+            "type": "integer",
+            "description": "Popcon install count."
+          },
+          "vote": {
+            "type": "integer",
+            "description": "Popcon vote count."
+          },
+          "days_since_upload": {
+            "type": ["number", "null"],
+            "description": "Days since last upload to sid. Null if no upload history."
+          },
+          "last_upload_date": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of last upload. Null if none."
+          },
+          "last_upload_version": {
+            "type": ["string", "null"],
+            "description": "Full Debian version string (epoch:upstream-revision). Null if none."
+          },
+          "debian_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the Debian version. Stripped of epoch, revision, +dfsg, ~debian, etc."
+          },
+          "rc_bug_count": {
+            "type": "integer",
+            "description": "Number of open RC bugs (critical, grave, serious; open, pending, done)."
+          },
+          "oldest_rc_bug_age": {
+            "type": ["number", "null"],
+            "description": "Days since oldest open RC bug arrived. Null if no RC bugs."
+          },
+          "maintainer": {
+            "type": ["string", "null"],
+            "description": "Maintainer name and email."
+          },
+          "vcs_status": {
+            "type": ["string", "null"],
+            "description": "vcswatch status (NEW, COMMITS, etc.). Null if not tracked."
+          },
+          "vcs_url": {
+            "type": ["string", "null"],
+            "description": "VCS repository URL. Null if not tracked."
+          },
+          "arch_version": {
+            "type": ["string", "null"],
+            "description": "Full Arch Linux package version. Null if not found on Arch."
+          },
+          "arch_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the Arch version. Null if not found."
+          },
+          "behind_upstream": {
+            "type": ["boolean", "null"],
+            "description": "True if Arch's upstream version is newer than Debian's. Null if incomparable."
+          },
+          "version_delta": {
+            "type": ["number", "null"],
+            "description": "How far behind Debian is, in semver distance: major*100 + minor*10 + patch. Null if incomparable or date-based versions."
+          }
+        }
+      }
+    }
+  }
+}
