@@ -39,6 +39,65 @@ header h1 a {
 header h1 a:hover {
   color: #58a6ff;
 }
+.guide-wrap {
+  position: relative;
+}
+.guide-btn {
+  background: none;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.guide-btn:hover {
+  border-color: #58a6ff;
+  color: #58a6ff;
+}
+.guide-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 420px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 16px 20px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  color: #c9d1d9;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.guide-popover.open {
+  display: block;
+}
+.guide-popover h3 {
+  font-size: 14px;
+  color: #e6edf3;
+  margin: 12px 0 4px;
+}
+.guide-popover h3:first-child {
+  margin-top: 0;
+}
+.guide-popover p {
+  margin: 0 0 4px;
+}
+.guide-popover ul {
+  margin: 4px 0 0 18px;
+  padding: 0;
+}
+.guide-popover li {
+  margin-bottom: 4px;
+}
+.guide-popover code {
+  background: #0d1117;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
 
 header .controls {
   display: flex;
@@ -259,6 +318,26 @@ footer a:hover {
 
 <header>
   <h1><a href="https://github.com/kristopolous/deborphan" target="_blank">Debian Neglect Explorer</a></h1>
+  <div class="guide-wrap">
+    <button class="guide-btn" id="guide-btn">Guide</button>
+    <div class="guide-popover" id="guide-popover">
+      <h3>What is this?</h3>
+      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how popular it is (x-axis, popcon votes) and how stale it is (y-axis, days since last upload or oldest open RC bug).</p>
+      <h3>What are the quadrants?</h3>
+      <p>The dashed lines split the plot at the median, creating four zones: <b>Popular &amp; Neglected</b> (high votes, long neglect) are the most urgent; <b>Popular &amp; Active</b> are well-maintained; <b>Niche &amp; Neglected</b> are low-traffic and stale; <b>Niche &amp; Active</b> are small but cared for.</p>
+      <h3>How to use it</h3>
+      <ul>
+        <li><b>Hover</b> any dot for details (votes, installs, bugs, maintainer, VCS status).</li>
+        <li><b>Click</b> a dot to open its tracker.debian.org page.</li>
+        <li><b>Scroll</b> to zoom, <b>drag</b> to pan. The axes extend beyond the data.</li>
+        <li><b>Shift+drag</b> to brush-select a region. The sidebar lists only those packages.</li>
+        <li><b>Search</b> by package name. Accepts regex: <code>^alsa$</code> for exact, <code>alac|7zip</code> for multiple.</li>
+        <li><b>Y-axis</b> switches between days since upload and oldest RC bug age.</li>
+        <li><b>Min vote</b> slider filters out low-popularity packages.</li>
+        <li><b>Dot size</b> slider adjusts circle radii by install count.</li>
+      </ul>
+    </div>
+  </div>
   <div class="controls">
     <input type="text" id="search" placeholder="Search packages&hellip;" autocomplete="off" spellcheck="false">
     <label>
