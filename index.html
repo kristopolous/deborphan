@@ -401,6 +401,7 @@ footer a:hover {
       <select id="y-axis-select">
         <option value="days_since_upload" selected>Days Since Upload</option>
         <option value="oldest_rc_bug_age">Oldest RC Bug Age</option>
+        <option value="version_delta">Behind Upstream (Version Delta)</option>
       </select>
     </label>
     <label>
@@ -652,6 +653,8 @@ function applyZoom() {
   xAxisLabel.attr("x", iw / 2).attr("y", ih + 48).style("font-size", 12 + "px");
   const yLabel = yField === "days_since_upload"
     ? "Days since upload (log)"
+    : yField === "version_delta"
+    ? "Behind upstream (log)"
     : "Oldest RC bug age (log)";
   yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52).style("font-size", 12 + "px");
 }
@@ -811,6 +814,8 @@ function render(resetZoom) {
   xAxisLabel.attr("x", iw / 2).attr("y", ih + 48).text("Installs (log)");
   const yLabel = yField === "days_since_upload"
     ? "Days since upload (log)"
+    : yField === "version_delta"
+    ? "Behind upstream (log)"
     : "Oldest RC bug age (log)";
   yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52);
 

@@ -45,6 +45,7 @@ def to_semver(version_str):
 
     Handles versions that aren't strictly semver:
     - Strips leading 'v'
+    - Strips leading zeros from numeric components (07 -> 7)
     - Pads missing components (1.0 -> 1.0.0)
     - Strips pre-release/build noise that semver can't handle
     """
@@ -52,6 +53,13 @@ def to_semver(version_str):
         return None
     v = version_str.strip()
     v = re.sub(r"^v", "", v)
+    # Strip leading zeros from numeric components (e.g. 6.07 -> 6.7)
+    def strip_leading_zero(m):
+        s = m.group(0)
+        if len(s) > 1 and s.startswith("0"):
+            return str(int(s))
+        return s
+    v = re.sub(r"\b0+(\d+)\b", strip_leading_zero, v)
     # Try strict parse first
     try:
         return Version.parse(v)
@@ -85,13 +93,17 @@ def version_delta(debian_upstream, arch_upstream):
     """Compute how far behind Debian is from Arch as a single number.
 
     Uses semver major/minor/patch distance, weighted: major*100 + minor*10 + patch.
-    Returns None if versions can't be compared or Arch is not newer.
+    Returns None if versions can't be compared, Arch is not newer, or versions
+    look like dates (which shouldn't be compared as semver).
     """
     d = to_semver(debian_upstream)
     a = to_semver(arch_upstream)
     if not d or not a:
         return None
     if a <= d:
+        return None
+    # Filter out date-based versions (e.g. 20250320, 20260707.1)
+    if d.major > 1900 or a.major > 1900:
         return None
     return (a.major - d.major) * 100 + (a.minor - d.minor) * 10 + (a.patch - d.patch)
 
