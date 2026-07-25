@@ -175,10 +175,7 @@ header .controls {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.tooltip.show { opacity: 1; }
-@media (pointer: coarse) {
-  .tooltip.show { pointer-events: auto; }
-}
+.tooltip.show { opacity: 1; pointer-events: auto; }
 .tooltip .pkg-name { font-weight: 600; color: #e6edf3; font-size: 14px; }
 .tooltip .pkg-maint { color: #8b949e; font-size: 11px; }
 .tooltip .pkg-stat { color: #c9d1d9; }
@@ -557,6 +554,7 @@ brushG.style("display", "none");
 
 const zoom = d3.zoom()
   .scaleExtent([1, 100])
+  .filter(ev => ev.target.tagName !== "circle")
   .on("zoom", onZoom);
 
 svg.call(zoom);

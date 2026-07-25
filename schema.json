@@ -89,6 +89,14 @@
             "type": ["string", "null"],
             "description": "Normalized upstream portion of the Homebrew version. Null if not found."
           },
+          "freebsd_version": {
+            "type": ["string", "null"],
+            "description": "Full FreeBSD port version. Null if not found on FreeBSD."
+          },
+          "freebsd_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the FreeBSD version. Null if not found."
+          },
           "behind_upstream": {
             "type": "boolean",
             "description": "True if any comparison source has a newer upstream version than Debian."
@@ -99,7 +107,7 @@
           },
           "best_comparison": {
             "type": ["string", "null"],
-            "description": "Which source provided the best (largest) version delta: 'arch' or 'homebrew'. Null if behind_upstream is false."
+            "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', or 'homebrew'. Null if behind_upstream is false."
           }
         }
       }

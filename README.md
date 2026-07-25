@@ -1,6 +1,6 @@
 # Debian Neglect Explorer
 
-An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux and Homebrew to identify packages genuinely behind upstream.
+An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux, Homebrew, and FreeBSD Ports to identify packages genuinely behind upstream.
 
 ## Quick Start
 
@@ -42,7 +42,8 @@ The pipeline compares Debian versions against multiple external sources to find 
 | Source | Packages | Notes |
 |--------|----------|-------|
 | Arch Linux | ~15k | Tracks upstream closely |
-| Homebrew | ~8.5k | macOS package manager, tracks upstream |
+| FreeBSD Ports | ~38k | BSD ports tree |
+| Homebrew | ~8.5k | macOS package manager |
 
 Run `python -m comparisons.fetch_all --list` to see all available sources.
 
@@ -87,6 +88,7 @@ build.py                   Merges data -> data/packages.json
 comparisons/               Version comparison framework
   __init__.py                Shared utilities + base class
   arch.py                    Arch Linux source
+  freebsd.py                 FreeBSD Ports source
   homebrew.py                Homebrew source
   fetch_all.py               Fetch from all sources
 generate_sample_data.py    Generates fake data for development
