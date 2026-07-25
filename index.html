@@ -464,6 +464,7 @@ function innerH() {
 
 function getFiltered() {
   return allData.filter(d => {
+    if (searchQuery && matchesSearch(d)) return true;
     if (d[yField] == null || d[yField] <= 0) return false;
     if (hideNoBugs && d.rc_bug_count === 0) return false;
     if (d.vote < minVote) return false;
@@ -472,7 +473,13 @@ function getFiltered() {
 }
 
 function matchesSearch(d) {
-  return !searchQuery || d.source.includes(searchQuery) || (d.display_name && d.display_name.includes(searchQuery));
+  if (!searchQuery) return true;
+  try {
+    const re = new RegExp(searchQuery);
+    return re.test(d.source) || (d.display_name && re.test(d.display_name));
+  } catch {
+    return d.source.includes(searchQuery) || (d.display_name && d.display_name.includes(searchQuery));
+  }
 }
 
 function updateSidebar() {
@@ -552,15 +559,17 @@ function median(arr) {
     : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function render() {
+function render(resetZoom) {
   const plotArea = document.getElementById("plot-area");
   const W = plotArea.clientWidth;
   const H = plotArea.clientHeight;
 
   svg.attr("width", W).attr("height", H);
 
-  currentTransform = d3.zoomIdentity;
-  svg.call(zoom.transform, d3.zoomIdentity);
+  if (resetZoom !== false) {
+    currentTransform = d3.zoomIdentity;
+    svg.call(zoom.transform, d3.zoomIdentity);
+  }
 
   const iw = innerW();
   const ih = innerH();
@@ -724,7 +733,7 @@ document.getElementById("dot-size").addEventListener("input", function () {
 
 document.getElementById("search").addEventListener("input", function () {
   searchQuery = this.value.trim().toLowerCase();
-  updateSidebar();
+  render(false);
 });
 
 window.addEventListener("resize", render);
