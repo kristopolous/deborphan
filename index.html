@@ -298,16 +298,24 @@ const xScale = d3.scaleLog();
 const yScale = d3.scaleLog();
 const rScale = d3.scaleSqrt();
 
-const xAxisG = g.append("g").attr("class", "axis x-axis");
-const yAxisG = g.append("g").attr("class", "axis y-axis");
-const gridX = g.append("g").attr("class", "grid x-grid");
-const gridY = g.append("g").attr("class", "grid y-grid");
+const zoomG = g.append("g").attr("class", "zoom-group");
 
-const quadrantG = g.append("g").attr("class", "quadrants");
-const quadrantLabels = g.append("g").attr("class", "quadrant-labels");
+const clipId = "plot-clip";
+zoomG.append("defs").append("clipPath").attr("id", clipId)
+  .append("rect");
 
-const pointsG = g.append("g").attr("class", "points");
-const brushG = g.append("g").attr("class", "brush");
+const clipG = zoomG.append("g").attr("clip-path", `url(#${clipId})`);
+
+const xAxisG = clipG.append("g").attr("class", "axis x-axis");
+const yAxisG = clipG.append("g").attr("class", "axis y-axis");
+const gridX = clipG.append("g").attr("class", "grid x-grid");
+const gridY = clipG.append("g").attr("class", "grid y-grid");
+
+const quadrantG = clipG.append("g").attr("class", "quadrants");
+const quadrantLabels = clipG.append("g").attr("class", "quadrant-labels");
+
+const pointsG = clipG.append("g").attr("class", "points");
+const brushG = zoomG.append("g").attr("class", "brush");
 
 const tooltip = document.getElementById("tooltip");
 
@@ -394,32 +402,30 @@ function applyZoom() {
   const t = currentTransform;
   const iw = innerW();
   const ih = innerH();
+  const k = t.k;
 
-  const rescaledX = t.rescaleX(xScale);
-  const rescaledY = t.rescaleY(yScale);
+  d3.select(`#${clipId} rect`)
+    .attr("width", iw).attr("height", ih);
 
-  let [x0, x1] = rescaledX.domain();
-  let [y0, y1] = rescaledY.domain();
-  x0 = Math.max(x0, 0.1);
-  y0 = Math.max(y0, 0.1);
-  if (x1 <= x0) x1 = x0 * 10;
-  if (y1 <= y0) y1 = y0 * 10;
+  zoomG.attr("transform", t.toString());
 
-  const zx = d3.scaleLog().domain([x0, x1]).range([0, iw]);
-  const zy = d3.scaleLog().domain([y0, y1]).range([ih, 0]);
+  const fontSize = 11 / k;
+  const labelSize = 12 / k;
 
   xAxisG.attr("transform", `translate(0,${ih})`)
-    .call(d3.axisBottom(zx).ticks(6, "~s").tickSizeOuter(0));
-  yAxisG.call(d3.axisLeft(zy).ticks(6, "~s").tickSizeOuter(0));
+    .call(d3.axisBottom(xScale).ticks(Math.max(3, Math.round(6 * k)), "~s").tickSizeOuter(0))
+    .selectAll("text").style("font-size", fontSize + "px");
+  yAxisG.call(d3.axisLeft(yScale).ticks(Math.max(3, Math.round(6 * k)), "~s").tickSizeOuter(0))
+    .selectAll("text").style("font-size", fontSize + "px");
 
   gridX.attr("transform", `translate(0,${ih})`)
-    .call(d3.axisBottom(zx).ticks(6).tickSize(-ih).tickFormat(""));
-  gridY.call(d3.axisLeft(zy).ticks(6).tickSize(-iw).tickFormat(""));
+    .call(d3.axisBottom(xScale).ticks(Math.max(3, Math.round(6 * k))).tickSize(-ih).tickFormat(""));
+  gridY.call(d3.axisLeft(yScale).ticks(Math.max(3, Math.round(6 * k))).tickSize(-iw).tickFormat(""));
 
   const xMed = median(getFiltered().map(d => d.vote).filter(v => v > 0));
   const yMed = median(getFiltered().map(d => d[yField]).filter(v => v > 0));
-  const xMedPx = zx(xMed);
-  const yMedPx = zy(yMed);
+  const xMedPx = xScale(xMed);
+  const yMedPx = yScale(yMed);
 
   quadrantG.selectAll("line").remove();
   if (xMedPx >= 0 && xMedPx <= iw) {
@@ -443,15 +449,11 @@ function applyZoom() {
       .attr("x", (xMedPx + iw) / 2).attr("y", (yMedPx + ih) / 2).text("ACTIVE");
   }
 
-  pointsG.selectAll("circle")
-    .attr("cx", d => zx(d.vote))
-    .attr("cy", d => zy(d[yField]));
-
-  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48);
+  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48).style("font-size", 12 + "px");
   const yLabel = yField === "days_since_upload"
     ? "Days since upload (log)"
     : "Oldest RC bug age (log)";
-  yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52);
+  yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52).style("font-size", 12 + "px");
 }
 
 function innerW() {
@@ -464,8 +466,9 @@ function innerH() {
 
 function getFiltered() {
   return allData.filter(d => {
-    if (searchQuery && matchesSearch(d)) return true;
     if (d[yField] == null || d[yField] <= 0) return false;
+    if (d.vote <= 0) return false;
+    if (searchQuery && matchesSearch(d)) return true;
     if (hideNoBugs && d.rc_bug_count === 0) return false;
     if (d.vote < minVote) return false;
     return true;
