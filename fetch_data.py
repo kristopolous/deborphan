@@ -149,10 +149,10 @@ def main():
         "packages": rows,
     }
 
-    with open("data/packages.json", "w") as f:
+    with open("data/packages_raw.json", "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print("Wrote data/packages.json", file=sys.stderr)
+    print("Wrote data/packages_raw.json", file=sys.stderr)
 
 
 if __name__ == "__main__":
