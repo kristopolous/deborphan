@@ -188,14 +188,14 @@ header .controls {
 .tooltip-close {
   position: absolute;
   top: 4px;
-  right: 8px;
+  right: 4px;
   background: none;
   border: none;
   color: #8b949e;
-  font-size: 18px;
+  font-size: 20px;
   cursor: pointer;
   line-height: 1;
-  padding: 0 4px;
+  padding: 6px 8px;
 }
 .tooltip-close:hover { color: #e6edf3; }
 
@@ -410,7 +410,7 @@ footer a:hover {
     <div class="slider-group">
       <label>
         Dot size
-        <input type="range" id="dot-size" min="0.5" max="5" value="1" step="0.1">
+        <input type="range" id="dot-size" min="0.5" max="5" value="0.8" step="0.1">
         <span id="dot-size-val">1x</span>
       </label>
       <label>
@@ -454,26 +454,23 @@ let selectedCircle = null;
 
 function selectCircle(circle) {
   if (selectedCircle) {
-    const d = selectedCircle.datum();
-    const origColor = d._origStroke || "#58a6ff";
     selectedCircle
-      .attr("stroke", origColor)
+      .attr("stroke", "#d2a8ff")
       .attr("stroke-width", 0.5)
       .attr("stroke-opacity", 0.3);
   }
   selectedCircle = circle;
   if (selectedCircle) {
-    selectedCircle._origStroke = selectedCircle.attr("stroke");
     selectedCircle
-      .attr("stroke", "#ffffff")
+      .attr("stroke", "#d2a8ff")
       .attr("stroke-width", 2)
       .attr("stroke-opacity", 1);
   }
 }
 let searchQuery = "";
-let dotSizeMultiplier = 1;
-let currentTransform = d3.zoomIdentity;
 const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+let dotSizeMultiplier = isTouchDevice ? 0.5 : 0.8;
+let currentTransform = d3.zoomIdentity;
 
 const svg = d3.select("#plot-area").append("svg");
 const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
@@ -849,9 +846,9 @@ function render(resetZoom) {
     .attr("stroke-width", 0.5)
     .attr("stroke-opacity", 0.3)
     .style("cursor", "pointer")
-    .on("mouseenter", isTouchDevice ? null : showTooltip)
+    .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); if (!isTouchDevice) showTooltip(ev, d); })
     .on("mousemove", isTouchDevice ? null : moveTooltip)
-    .on("mouseleave", isTouchDevice ? null : hideTooltip)
+    .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) hideTooltip(); })
     .on("click", (ev, d) => {
       if (isTouchDevice) {
         showTooltip(ev, d);
@@ -906,6 +903,7 @@ function moveTooltip(ev) {
 
 function hideTooltip() {
   tooltip.classList.remove("show");
+  selectCircle(null);
 }
 
 document.getElementById("y-axis-select").addEventListener("change", function () {
