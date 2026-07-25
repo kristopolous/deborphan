@@ -18,24 +18,40 @@ python3 -m http.server 8080
 # Open http://localhost:8080
 ```
 
-## Fetching Real Data
+## CLI
 
-Requires `psql` (PostgreSQL client) to query the UDD mirror:
+`run.py` is the main entry point:
 
 ```bash
 # Full pipeline (fetch + build)
-.venv/bin/python run.py
+.venv/bin/python run.py fetch
 
-# Or step by step:
-.venv/bin/python fetch_data.py              # 1. Fetch Debian data from UDD
-.venv/bin/python -m comparisons.fetch_all   # 2. Fetch version data from comparison sources
-.venv/bin/python build.py                   # 3. Merge and precompute final dataset
+# Fetch only specific comparison sources
+.venv/bin/python run.py fetch --sources arch
+.venv/bin/python run.py fetch --sources arch homebrew
 
-# With Repology (top 500 most popular packages)
-.venv/bin/python run.py --repology 500
+# Skip UDD, just refresh comparison sources
+.venv/bin/python run.py fetch --no-udd
+
+# Build final data/packages.json from cached data
+.venv/bin/python run.py build
+
+# Query Repology (re-entrant, sorted by popularity)
+.venv/bin/python run.py repology --limit 500
+.venv/bin/python run.py repology             # resume from last checkpoint
+
+# List available sources
+.venv/bin/python run.py list
+
+# Generate sample data for testing
+.venv/bin/python run.py sample
+
+# Serve locally
+.venv/bin/python run.py serve
+.venv/bin/python run.py serve --port 3000
 ```
 
-This produces `data/packages.json` with all fields precomputed. The output schema is documented in `schema.json`.
+Requires `psql` (PostgreSQL client) for UDD fetch. The pipeline produces `data/packages.json` with all fields precomputed. Schema is documented in `schema.json`.
 
 ### Comparison Sources
 
@@ -52,18 +68,8 @@ The pipeline compares Debian versions against multiple external sources to find 
 Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume:
 
 ```bash
-# Query top 500 most popular packages
-.venv/bin/python -m comparisons.repology --limit 500
-
-# Resume from where you left off (default)
-.venv/bin/python -m comparisons.repology
-```
-
-Run `python -m comparisons.fetch_all --list` to see all available sources.
-
-To fetch only specific sources:
-```bash
-.venv/bin/python -m comparisons.fetch_all --sources arch homebrew
+.venv/bin/python run.py fetch --sources arch   # Arch only
+.venv/bin/python run.py repology --limit 500   # Repology top 500
 ```
 
 ## How It Works
@@ -97,7 +103,7 @@ The comparison framework is extensible — see `comparisons/` directory to add n
 ## Files
 
 ```
-run.py                     Full pipeline entry point (fetch + build)
+run.py                     CLI entry point (fetch, build, repology, serve, list, sample)
 index.html                 Single-page D3 scatter plot (HTML + CSS + JS)
 fetch_data.py              Queries UDD via psql -> data/packages_raw.json
 build.py                   Merges data -> data/packages.json
