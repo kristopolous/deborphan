@@ -454,6 +454,16 @@ let selectedRegion = null;
 let selectedCircle = null;
 const visitedCircles = new Set();
 
+// Restore state from URL hash
+const validYFields = ["days_since_upload", "oldest_rc_bug_age", "version_delta"];
+if (location.hash) {
+  const hashField = location.hash.slice(1);
+  if (validYFields.includes(hashField)) {
+    yField = hashField;
+    document.getElementById("y-axis-select").value = hashField;
+  }
+}
+
 function markVisited(circle) {
   if (!circle) return;
   const src = circle.datum().source;
@@ -887,20 +897,28 @@ function render(resetZoom) {
 
 function showTooltip(ev, d) {
   const yVal = d[yField];
-  const yLabel = yField === "days_since_upload" ? "Days since upload" : "Oldest RC bug age";
+  const yLabel = yField === "days_since_upload"
+    ? "Days since upload"
+    : yField === "version_delta"
+    ? "Behind upstream"
+    : "Oldest RC bug age";
   const lines = [
     `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
     `<div class="pkg-name">${d.display_name || d.source}</div>`,
     `<div class="pkg-maint">${d.maintainer || ""}</div>`,
     `<div class="pkg-stat"><b>${d.insts.toLocaleString()}</b> installs &middot; <b>${d.vote}</b> popcon votes</div>`,
-    `<div class="pkg-stat"><b>${Math.round(yVal)}</b> ${yLabel.toLowerCase()}</div>`,
+    yField === "version_delta" && d.version_delta != null
+      ? `<div class="pkg-stat"><b>${d.version_delta}</b> versions behind</div>`
+      : `<div class="pkg-stat"><b>${Math.round(yVal)}</b> ${yLabel.toLowerCase()}</div>`,
     d.rc_bug_count > 0
       ? `<div class="pkg-stat"><b>${d.rc_bug_count}</b> open RC bug${d.rc_bug_count > 1 ? "s" : ""}</div>`
       : "",
     d.last_upload_version
       ? `<div class="pkg-stat">Last: <b>${d.last_upload_version}</b> (${d.last_upload_date ? new Date(d.last_upload_date).toLocaleDateString() : "?"})</div>`
       : "",
-    d.vcs_status ? `<div class="pkg-stat">VCS: ${d.vcs_status}</div>` : "",
+    d.debian_upstream_version && d.arch_upstream_version
+      ? `<div class="pkg-stat">${d.debian_upstream_version} → ${d.arch_upstream_version}</div>`
+      : "",
     `<div class="pkg-stat"><a href="https://tracker.debian.org/pkg/${d.source}" target="_blank">tracker.debian.org &rarr;</a></div>`,
   ].filter(Boolean).join("");
   tooltip.innerHTML = lines;
@@ -926,6 +944,7 @@ function hideTooltip() {
 
 document.getElementById("y-axis-select").addEventListener("change", function () {
   yField = this.value;
+  location.hash = yField;
   render();
 });
 
