@@ -1,36 +1,49 @@
 #!/usr/bin/env python3
 """Fetch Debian package neglect data from UDD and write to static JSON."""
 
+import csv
+import io
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 UDD_HOST = "udd-mirror.debian.net"
 UDD_PORT = 5432
 UDD_DB = "udd"
-UDD_USER = "udd"
+UDD_USER = "udd-mirror"
+UDD_PASS = "udd-mirror"
 
-SQL = """
-WITH latest_uploads AS (
+SQL = r"""
+COPY (
+WITH latest_sources AS (
     SELECT DISTINCT ON (source)
-        source, version, date
-    FROM upload_history
-    WHERE distribution = 'debian'
-    ORDER BY source, date DESC
+        source, version, maintainer
+    FROM sources
+    WHERE distribution = 'debian' AND release = 'sid' AND component = 'main'
+    ORDER BY source, version DESC
+),
+latest_uploads AS (
+    SELECT DISTINCT ON (uh.source)
+        uh.source, uh.version, uh.date
+    FROM upload_history uh
+    INNER JOIN latest_sources ls ON uh.source = ls.source
+    ORDER BY uh.source, uh.date DESC
 ),
 rc_bugs AS (
     SELECT
         source,
         COUNT(*) AS rc_bug_count,
         MIN(arrival) AS oldest_rc_arrival
-    FROM all_bugs
+    FROM bugs
     WHERE severity IN ('critical', 'grave', 'serious')
       AND status IN ('open', 'pending', 'done')
     GROUP BY source
 )
 SELECT
-    s.source,
+    ls.source,
     COALESCE(ps.vote, 0) AS vote,
     COALESCE(ps.insts, 0) AS insts,
     EXTRACT(EPOCH FROM (now() - lu.date)) / 86400 AS days_since_upload,
@@ -41,40 +54,35 @@ SELECT
          THEN EXTRACT(EPOCH FROM (now() - rb.oldest_rc_arrival)) / 86400
          ELSE NULL
     END AS oldest_rc_bug_age,
-    s.maintainer,
+    ls.maintainer,
     v.status AS vcs_status,
     v.url AS vcs_url
-FROM sources s
-LEFT JOIN popcon_src ps ON s.source = ps.source
-LEFT JOIN latest_uploads lu ON s.source = lu.source
-LEFT JOIN rc_bugs rb ON s.source = rb.source
-LEFT JOIN vcswatch v ON s.source = v.source
-WHERE s.distribution = 'debian'
-  AND s.release = 'sid'
-  AND s.component = 'main'
-ORDER BY s.source;
+FROM latest_sources ls
+LEFT JOIN popcon_src ps ON ls.source = ps.source
+LEFT JOIN latest_uploads lu ON ls.source = lu.source
+LEFT JOIN rc_bugs rb ON ls.source = rb.source
+LEFT JOIN vcswatch v ON ls.source = v.source
+ORDER BY ls.source
+) TO STDOUT WITH CSV HEADER;
 """
 
+
 def fetch():
+    conn_str = f"postgresql://{UDD_USER}:{UDD_PASS}@{UDD_HOST}:{UDD_PORT}/{UDD_DB}"
     try:
-        result = subprocess.run(
-            [
-                "psql",
-                "-h", UDD_HOST,
-                "-p", str(UDD_PORT),
-                "-U", UDD_USER,
-                "-d", UDD_DB,
-                "--no-align",
-                "-t",
-                "-A",
-                "-F", "\t",
-                "-c", SQL,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            env={"PGSSLMODE": "require"},
-        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False) as f:
+            f.write(SQL)
+            sql_path = f.name
+        try:
+            result = subprocess.run(
+                ["psql", conn_str, "-f", sql_path],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env={"PGSSLMODE": "require"},
+            )
+        finally:
+            os.unlink(sql_path)
     except FileNotFoundError:
         print("psql not found. Install postgresql-client.", file=sys.stderr)
         sys.exit(1)
@@ -86,41 +94,34 @@ def fetch():
         print(f"psql error:\n{result.stderr}", file=sys.stderr)
         sys.exit(1)
 
+    reader = csv.DictReader(io.StringIO(result.stdout))
+
+    def parse_float(v):
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def parse_int(v):
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return 0
+
     rows = []
-    for line in result.stdout.strip().split("\n"):
-        if not line:
-            continue
-        fields = line.split("\t")
-        if len(fields) < 10:
-            continue
-        source, vote, insts, days_since_upload, last_upload_date, \
-            last_upload_version, rc_bug_count, oldest_rc_bug_age, \
-            maintainer, vcs_status, vcs_url = fields[:11]
-
-        def parse_float(v):
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                return None
-
-        def parse_int(v):
-            try:
-                return int(v)
-            except (ValueError, TypeError):
-                return 0
-
+    for r in reader:
         rows.append({
-            "source": source,
-            "vote": parse_int(vote),
-            "insts": parse_int(insts),
-            "days_since_upload": parse_float(days_since_upload),
-            "last_upload_date": last_upload_date if last_upload_date else None,
-            "last_upload_version": last_upload_version if last_upload_version else None,
-            "rc_bug_count": parse_int(rc_bug_count),
-            "oldest_rc_bug_age": parse_float(oldest_rc_bug_age),
-            "maintainer": maintainer if maintainer else None,
-            "vcs_status": vcs_status if vcs_status else None,
-            "vcs_url": vcs_url if vcs_url else None,
+            "source": r["source"],
+            "vote": parse_int(r["vote"]),
+            "insts": parse_int(r["insts"]),
+            "days_since_upload": parse_float(r["days_since_upload"]),
+            "last_upload_date": r["last_upload_date"] or None,
+            "last_upload_version": r["last_upload_version"] or None,
+            "rc_bug_count": parse_int(r["rc_bug_count"]),
+            "oldest_rc_bug_age": parse_float(r["oldest_rc_bug_age"]),
+            "maintainer": r["maintainer"] or None,
+            "vcs_status": r["vcs_status"] or None,
+            "vcs_url": r["vcs_url"] or None,
         })
 
     return rows
