@@ -26,7 +26,7 @@ Requires `psql` (PostgreSQL client) to query the UDD mirror:
 # 1. Fetch Debian data from UDD
 .venv/bin/python fetch_data.py
 
-# 2. Fetch version data from comparison sources (Arch, Homebrew)
+# 2. Fetch version data from comparison sources (Arch, FreeBSD, Homebrew, pkgsrc, Repology)
 .venv/bin/python -m comparisons.fetch_all
 
 # 3. Merge and precompute final dataset
@@ -66,7 +66,7 @@ To fetch only specific sources:
 
 ## How It Works
 
-The pipeline compares Debian package versions against external sources (Arch Linux, Homebrew) to compute a **version delta** — how many semver versions behind Debian is. This distinguishes packages that are genuinely neglected (behind upstream) from those that are simply old (upstream is also stagnant).
+The pipeline compares Debian package versions against external sources (Arch, FreeBSD, Homebrew, pkgsrc, Repology) to compute a **version delta** — how many semver versions behind Debian is. This distinguishes packages that are genuinely neglected (behind upstream) from those that are simply old (upstream is also stagnant).
 
 The comparison framework is extensible — see `comparisons/` directory to add new sources.
 
@@ -78,7 +78,7 @@ The comparison framework is extensible — see `comparisons/` directory to add n
 - Dot size: number of open RC bugs (bigger = more bugs)
 - Quadrant dividers at the median (neglected, active, etc.)
 - Hover tooltips showing installs, votes, version info, bugs, maintainer, VCS status
-- Click any dot to open tracker.debian.org/pkg/{name}
+- Click dot to open tracker.debian.org/pkg/{name} (or use tooltip link on mobile)
 - Y-axis toggle: three metrics available
 - Hide zero-bug packages (on by default)
 - Min installs slider to filter low-deployment packages
