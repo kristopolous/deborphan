@@ -57,6 +57,19 @@ header .controls {
 
 .controls select:focus { outline: 1px solid #58a6ff; }
 
+#search {
+  background: #161b22;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  width: 200px;
+}
+
+#search:focus { outline: 1px solid #58a6ff; border-color: #58a6ff; }
+#search::placeholder { color: #484f58; }
+
 #chart-container {
   display: flex;
   height: calc(100vh - 53px);
@@ -207,6 +220,7 @@ header .controls {
 <header>
   <h1>Debian Neglect Explorer</h1>
   <div class="controls">
+    <input type="text" id="search" placeholder="Search packages&hellip;" autocomplete="off" spellcheck="false">
     <label>
       Y-axis
       <select id="y-axis-select">
@@ -254,6 +268,7 @@ let yField = "days_since_upload";
 let hideNoBugs = true;
 let minVote = 0;
 let selectedRegion = null;
+let searchQuery = "";
 
 const svg = d3.select("#plot-area").append("svg");
 const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
@@ -325,6 +340,10 @@ function getFiltered() {
   });
 }
 
+function matchesSearch(d) {
+  return !searchQuery || d.source.includes(searchQuery);
+}
+
 function updateSidebar() {
   const data = getFiltered();
   const list = document.querySelector("#package-list ul");
@@ -340,6 +359,7 @@ function updateSidebar() {
     });
   }
 
+  matched = matched.filter(matchesSearch);
   matched.sort((a, b) => b.vote - a.vote);
 
   countEl.textContent = matched.length;
@@ -357,12 +377,13 @@ function updateSidebar() {
   list.querySelectorAll("li").forEach(li => {
     li.addEventListener("click", () => {
       const src = li.dataset.source;
-      window.open(`https://tracker.debian.org/package/${src}`, "_blank");
+      window.open(`https://tracker.debian.org/pkg/${src}`, "_blank");
     });
   });
 
   pointsG.selectAll("circle")
     .attr("opacity", d => {
+      if (!matchesSearch(d)) return 0.06;
       if (!selectedRegion) return 1;
       const cx = xScale(d.vote);
       const cy = yScale(d[yField]);
@@ -483,7 +504,7 @@ function render() {
     .on("mousemove", moveTooltip)
     .on("mouseleave", hideTooltip)
     .on("click", (ev, d) => {
-      window.open(`https://tracker.debian.org/package/${d.source}`, "_blank");
+      window.open(`https://tracker.debian.org/pkg/${d.source}`, "_blank");
     })
     .merge(circles)
     .attr("r", d => rScale(d.insts))
@@ -510,7 +531,7 @@ function showTooltip(ev, d) {
       ? `<div class="pkg-stat">Last: <b>${d.last_upload_version}</b> (${d.last_upload_date ? new Date(d.last_upload_date).toLocaleDateString() : "?"})</div>`
       : "",
     d.vcs_status ? `<div class="pkg-stat">VCS: ${d.vcs_status}</div>` : "",
-    `<div class="pkg-stat"><a href="https://tracker.debian.org/package/${d.source}" target="_blank">tracker.debian.org &rarr;</a></div>`,
+    `<div class="pkg-stat"><a href="https://tracker.debian.org/pkg/${d.source}" target="_blank">tracker.debian.org &rarr;</a></div>`,
   ].filter(Boolean).join("");
   tooltip.innerHTML = lines;
   tooltip.classList.add("show");
@@ -545,6 +566,11 @@ document.getElementById("hide-no-bugs").addEventListener("change", function () {
 document.getElementById("min-vote").addEventListener("input", function () {
   minVote = +this.value;
   document.getElementById("min-vote-val").textContent = minVote;
+  render();
+});
+
+document.getElementById("search").addEventListener("input", function () {
+  searchQuery = this.value.trim().toLowerCase();
   render();
 });
 
