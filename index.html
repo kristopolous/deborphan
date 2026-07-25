@@ -451,11 +451,22 @@ let hideNoBugs = true;
 let minVote = 0;
 let selectedRegion = null;
 let selectedCircle = null;
+const visitedCircles = new Set();
+
+function markVisited(circle) {
+  if (!circle) return;
+  const src = circle.datum().source;
+  if (visitedCircles.has(src)) return;
+  visitedCircles.add(src);
+  circle
+    .attr("stroke-opacity", 0.5)
+    .attr("fill-opacity", 0.4);
+}
 
 function selectCircle(circle) {
-  if (selectedCircle) {
+  if (selectedCircle && !visitedCircles.has(selectedCircle.datum().source)) {
     selectedCircle
-      .attr("stroke", "#d2a8ff")
+      .attr("stroke", selectedCircle.attr("data-orig-stroke"))
       .attr("stroke-width", 0.5)
       .attr("stroke-opacity", 0.3);
   }
@@ -463,8 +474,8 @@ function selectCircle(circle) {
   if (selectedCircle) {
     selectedCircle
       .attr("stroke", "#d2a8ff")
-      .attr("stroke-width", 2)
-      .attr("stroke-opacity", 1);
+      .attr("stroke-width", 1.5)
+      .attr("stroke-opacity", 0.8);
   }
 }
 let searchQuery = "";
@@ -843,6 +854,7 @@ function render(resetZoom) {
     .attr("fill", color)
     .attr("fill-opacity", 0.7)
     .attr("stroke", color)
+    .attr("data-orig-stroke", color)
     .attr("stroke-width", 0.5)
     .attr("stroke-opacity", 0.3)
     .style("cursor", "pointer")
@@ -850,6 +862,7 @@ function render(resetZoom) {
     .on("mousemove", isTouchDevice ? null : moveTooltip)
     .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) hideTooltip(); })
     .on("click", (ev, d) => {
+      markVisited(d3.select(this));
       if (isTouchDevice) {
         showTooltip(ev, d);
         ev.stopPropagation();
