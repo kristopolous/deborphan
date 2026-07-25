@@ -20,9 +20,11 @@ SQL = r"""
 COPY (
 WITH latest_sources AS (
     SELECT DISTINCT ON (source)
-        source, version, maintainer
+        source, version, maintainer,
+        (string_to_array(bin, ', '))[1] AS first_bin,
+        bin
     FROM sources
-    WHERE distribution = 'debian' AND release = 'sid' AND component = 'main'
+    WHERE distribution = 'debian' AND release = 'sid'
     ORDER BY source, version DESC
 ),
 latest_uploads AS (
@@ -44,6 +46,14 @@ rc_bugs AS (
 )
 SELECT
     ls.source,
+    CASE
+        WHEN ls.source = ANY(string_to_array(ls.bin, ', ')) THEN ls.source
+        WHEN regexp_replace(ls.source, '^rust-', '') = ANY(string_to_array(ls.bin, ', ')) THEN regexp_replace(ls.source, '^rust-', '')
+        WHEN regexp_replace(ls.source, '^python3?-', '') = ANY(string_to_array(ls.bin, ', ')) THEN regexp_replace(ls.source, '^python3?-', '')
+        WHEN regexp_replace(ls.source, '^perl-', '') = ANY(string_to_array(ls.bin, ', ')) THEN regexp_replace(ls.source, '^perl-', '')
+        WHEN regexp_replace(ls.source, '^ruby-', '') = ANY(string_to_array(ls.bin, ', ')) THEN regexp_replace(ls.source, '^ruby-', '')
+        ELSE ls.first_bin
+    END AS display_name,
     COALESCE(ps.vote, 0) AS vote,
     COALESCE(ps.insts, 0) AS insts,
     EXTRACT(EPOCH FROM (now() - lu.date)) / 86400 AS days_since_upload,
@@ -112,6 +122,7 @@ def fetch():
     for r in reader:
         rows.append({
             "source": r["source"],
+            "display_name": r["display_name"] or r["source"],
             "vote": parse_int(r["vote"]),
             "insts": parse_int(r["insts"]),
             "days_since_upload": parse_float(r["days_since_upload"]),

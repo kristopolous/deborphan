@@ -183,6 +183,20 @@ header .controls {
 .grid line { stroke: #161b22; stroke-dasharray: 2,4; }
 .grid path { stroke: none; }
 .brush .selection { fill: #58a6ff; fill-opacity: 0.15; stroke: #58a6ff; stroke-width: 1; }
+.brush .overlay { cursor: crosshair; }
+.zoom-hint {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #484f58;
+  z-index: 10;
+  pointer-events: none;
+}
 
 #loading {
   position: absolute;
@@ -233,6 +247,11 @@ header .controls {
       Hide zero-bug packages
     </label>
     <label>
+      Dot size
+      <input type="range" id="dot-size" min="0.5" max="5" value="1" step="0.1">
+      <span id="dot-size-val">1x</span>
+    </label>
+    <label>
       Min popcon vote
       <input type="range" id="min-vote" min="0" max="500" value="0" step="10">
       <span id="min-vote-val">0</span>
@@ -269,6 +288,8 @@ let hideNoBugs = true;
 let minVote = 0;
 let selectedRegion = null;
 let searchQuery = "";
+let dotSizeMultiplier = 1;
+let currentTransform = d3.zoomIdentity;
 
 const svg = d3.select("#plot-area").append("svg");
 const g = svg.append("g").attr("transform", `translate(${MARGIN.left},${MARGIN.top})`);
@@ -314,10 +335,43 @@ legendDiv.html(`
   <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span> Niche &amp; active</div>
 `);
 
+d3.select("#plot-area").append("div").attr("class", "zoom-hint")
+  .html("Scroll to zoom &middot; Drag to pan &middot; Shift+drag to brush-select");
+
 const brush = d3.brush()
   .on("start brush end", onBrush);
 
 brushG.call(brush);
+brushG.style("display", "none");
+
+const zoom = d3.zoom()
+  .scaleExtent([1, 100])
+  .on("zoom", onZoom);
+
+svg.call(zoom);
+
+let brushing = false;
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Shift" && !brushing) {
+    brushing = true;
+    brushG.style("display", null);
+    svg.on(".zoom", null);
+    svg.style("cursor", "crosshair");
+  }
+});
+
+document.addEventListener("keyup", e => {
+  if (e.key === "Shift" && brushing) {
+    brushing = false;
+    g.select(".brush").call(brush.move, null);
+    selectedRegion = null;
+    brushG.style("display", "none");
+    svg.call(zoom);
+    svg.style("cursor", null);
+    updateSidebar();
+  }
+});
 
 function onBrush(event) {
   if (!event.selection) {
@@ -331,6 +385,83 @@ function onBrush(event) {
   updateSidebar();
 }
 
+function onZoom(event) {
+  currentTransform = event.transform;
+  applyZoom();
+}
+
+function applyZoom() {
+  const t = currentTransform;
+  const iw = innerW();
+  const ih = innerH();
+
+  const rescaledX = t.rescaleX(xScale);
+  const rescaledY = t.rescaleY(yScale);
+
+  let [x0, x1] = rescaledX.domain();
+  let [y0, y1] = rescaledY.domain();
+  x0 = Math.max(x0, 0.1);
+  y0 = Math.max(y0, 0.1);
+  if (x1 <= x0) x1 = x0 * 10;
+  if (y1 <= y0) y1 = y0 * 10;
+
+  const zx = d3.scaleLog().domain([x0, x1]).range([0, iw]);
+  const zy = d3.scaleLog().domain([y0, y1]).range([ih, 0]);
+
+  xAxisG.attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(zx).ticks(6, "~s").tickSizeOuter(0));
+  yAxisG.call(d3.axisLeft(zy).ticks(6, "~s").tickSizeOuter(0));
+
+  gridX.attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(zx).ticks(6).tickSize(-ih).tickFormat(""));
+  gridY.call(d3.axisLeft(zy).ticks(6).tickSize(-iw).tickFormat(""));
+
+  const xMed = median(getFiltered().map(d => d.vote).filter(v => v > 0));
+  const yMed = median(getFiltered().map(d => d[yField]).filter(v => v > 0));
+  const xMedPx = zx(xMed);
+  const yMedPx = zy(yMed);
+
+  quadrantG.selectAll("line").remove();
+  if (xMedPx >= 0 && xMedPx <= iw) {
+    quadrantG.append("line")
+      .attr("x1", xMedPx).attr("x2", xMedPx)
+      .attr("y1", 0).attr("y2", ih)
+      .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+  }
+  if (yMedPx >= 0 && yMedPx <= ih) {
+    quadrantG.append("line")
+      .attr("x1", 0).attr("x2", iw)
+      .attr("y1", yMedPx).attr("y2", yMedPx)
+      .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+  }
+
+  quadrantLabels.selectAll("text").remove();
+  if (xMedPx > 0 && xMedPx < iw && yMedPx > 0 && yMedPx < ih) {
+    quadrantLabels.append("text").attr("class", "quadrant-label")
+      .attr("x", (xMedPx + iw) / 2).attr("y", yMedPx / 2).text("NEGLECTED");
+    quadrantLabels.append("text").attr("class", "quadrant-label")
+      .attr("x", (xMedPx + iw) / 2).attr("y", (yMedPx + ih) / 2).text("ACTIVE");
+  }
+
+  pointsG.selectAll("circle")
+    .attr("cx", d => zx(d.vote))
+    .attr("cy", d => zy(d[yField]));
+
+  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48);
+  const yLabel = yField === "days_since_upload"
+    ? "Days since upload (log)"
+    : "Oldest RC bug age (log)";
+  yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52);
+}
+
+function innerW() {
+  return svg.attr("width") - MARGIN.left - MARGIN.right;
+}
+
+function innerH() {
+  return svg.attr("height") - MARGIN.top - MARGIN.bottom;
+}
+
 function getFiltered() {
   return allData.filter(d => {
     if (d[yField] == null || d[yField] <= 0) return false;
@@ -341,7 +472,7 @@ function getFiltered() {
 }
 
 function matchesSearch(d) {
-  return !searchQuery || d.source.includes(searchQuery);
+  return !searchQuery || d.source.includes(searchQuery) || (d.display_name && d.display_name.includes(searchQuery));
 }
 
 function updateSidebar() {
@@ -349,47 +480,68 @@ function updateSidebar() {
   const list = document.querySelector("#package-list ul");
   const countEl = document.getElementById("match-count");
 
-  let matched = data;
-  if (selectedRegion) {
-    matched = data.filter(d => {
-      const cx = xScale(d.vote);
-      const cy = yScale(d[yField]);
-      return cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
-             cy >= selectedRegion.y0 && cy <= selectedRegion.y1;
+  if (searchQuery) {
+    const searchResults = allData.filter(matchesSearch);
+    searchResults.sort((a, b) => b.vote - a.vote);
+
+    countEl.textContent = searchResults.length;
+    list.innerHTML = searchResults.slice(0, 500).map(d => {
+      const yVal = d[yField];
+      const yDisplay = yVal != null ? `${Math.round(yVal)}d` : "n/a";
+      return `<li data-source="${d.source}">
+        <span class="name">${d.display_name || d.source}</span>
+        <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
+      </li>`;
+    }).join("");
+
+    list.querySelectorAll("li").forEach(li => {
+      li.addEventListener("click", () => {
+        const src = li.dataset.source;
+        window.open(`https://tracker.debian.org/pkg/${src}`, "_blank");
+      });
     });
+
+    pointsG.selectAll("circle")
+      .attr("opacity", d => matchesSearch(d) ? 1 : 0.06);
+  } else {
+    let matched = data;
+    if (selectedRegion) {
+      matched = data.filter(d => {
+        const cx = xScale(d.vote);
+        const cy = yScale(d[yField]);
+        return cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
+               cy >= selectedRegion.y0 && cy <= selectedRegion.y1;
+      });
+    }
+
+    matched.sort((a, b) => b.vote - a.vote);
+
+    countEl.textContent = matched.length;
+    list.innerHTML = matched.slice(0, 500).map(d => {
+      const yVal = d[yField];
+      const yDisplay = `${Math.round(yVal)}d`;
+      return `<li data-source="${d.source}">
+        <span class="name">${d.display_name || d.source}</span>
+        <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
+      </li>`;
+    }).join("");
+
+    list.querySelectorAll("li").forEach(li => {
+      li.addEventListener("click", () => {
+        const src = li.dataset.source;
+        window.open(`https://tracker.debian.org/pkg/${src}`, "_blank");
+      });
+    });
+
+    pointsG.selectAll("circle")
+      .attr("opacity", d => {
+        if (!selectedRegion) return 1;
+        const cx = xScale(d.vote);
+        const cy = yScale(d[yField]);
+        return (cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
+                cy >= selectedRegion.y0 && cy <= selectedRegion.y1) ? 1 : 0.12;
+      });
   }
-
-  matched = matched.filter(matchesSearch);
-  matched.sort((a, b) => b.vote - a.vote);
-
-  countEl.textContent = matched.length;
-  list.innerHTML = matched.slice(0, 500).map(d => {
-    const yVal = d[yField];
-    const yDisplay = yField === "days_since_upload"
-      ? `${Math.round(yVal)}d`
-      : `${Math.round(yVal)}d`;
-    return `<li data-source="${d.source}">
-      <span class="name">${d.source}</span>
-      <span class="meta">${d.vote} votes &middot; ${yDisplay}</span>
-    </li>`;
-  }).join("");
-
-  list.querySelectorAll("li").forEach(li => {
-    li.addEventListener("click", () => {
-      const src = li.dataset.source;
-      window.open(`https://tracker.debian.org/pkg/${src}`, "_blank");
-    });
-  });
-
-  pointsG.selectAll("circle")
-    .attr("opacity", d => {
-      if (!matchesSearch(d)) return 0.06;
-      if (!selectedRegion) return 1;
-      const cx = xScale(d.vote);
-      const cy = yScale(d[yField]);
-      return (cx >= selectedRegion.x0 && cx <= selectedRegion.x1 &&
-              cy >= selectedRegion.y0 && cy <= selectedRegion.y1) ? 1 : 0.12;
-    });
 }
 
 function median(arr) {
@@ -407,11 +559,11 @@ function render() {
 
   svg.attr("width", W).attr("height", H);
 
-  const innerW = W - MARGIN.left - MARGIN.right;
-  const innerH = H - MARGIN.top - MARGIN.bottom;
+  currentTransform = d3.zoomIdentity;
+  svg.call(zoom.transform, d3.zoomIdentity);
 
-  g.select(".brush").call(brush.move, null);
-  selectedRegion = null;
+  const iw = innerW();
+  const ih = innerH();
 
   const data = getFiltered();
   if (data.length === 0) {
@@ -429,25 +581,25 @@ function render() {
   const votes = data.map(d => d.vote).filter(v => v > 0);
   const yVals = data.map(d => d[yField]).filter(v => v > 0);
 
-  xScale.domain(d3.extent(votes)).range([0, innerW]).clamp(true);
-  yScale.domain(d3.extent(yVals)).range([innerH, 0]).clamp(true);
+  xScale.domain(d3.extent(votes)).range([0, iw]);
+  yScale.domain(d3.extent(yVals)).range([ih, 0]);
 
   const maxInst = d3.max(data, d => d.insts) || 1;
-  rScale.domain([0, maxInst]).range([1.5, 8]);
+  rScale.domain([0, maxInst]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
 
-  xAxisG.attr("transform", `translate(0,${innerH})`)
+  xAxisG.attr("transform", `translate(0,${ih})`)
     .call(d3.axisBottom(xScale).ticks(6, "~s").tickSizeOuter(0));
   yAxisG.call(d3.axisLeft(yScale).ticks(6, "~s").tickSizeOuter(0));
 
-  gridX.attr("transform", `translate(0,${innerH})`)
-    .call(d3.axisBottom(xScale).ticks(6).tickSize(-innerH).tickFormat(""));
-  gridY.call(d3.axisLeft(yScale).ticks(6).tickSize(-innerW).tickFormat(""));
+  gridX.attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale).ticks(6).tickSize(-ih).tickFormat(""));
+  gridY.call(d3.axisLeft(yScale).ticks(6).tickSize(-iw).tickFormat(""));
 
-  xAxisLabel.attr("x", innerW / 2).attr("y", innerH + 48);
+  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48);
   const yLabel = yField === "days_since_upload"
     ? "Days since upload (log)"
     : "Oldest RC bug age (log)";
-  yAxisLabel.text(yLabel).attr("x", -innerH / 2).attr("y", -52);
+  yAxisLabel.text(yLabel).attr("x", -ih / 2).attr("y", -52);
 
   const xMed = median(votes);
   const yMed = median(yVals);
@@ -455,26 +607,18 @@ function render() {
   quadrantG.selectAll("*").remove();
   quadrantG.append("line")
     .attr("x1", xScale(xMed)).attr("x2", xScale(xMed))
-    .attr("y1", 0).attr("y2", innerH)
+    .attr("y1", 0).attr("y2", ih)
     .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
   quadrantG.append("line")
-    .attr("x1", 0).attr("x2", innerW)
+    .attr("x1", 0).attr("x2", iw)
     .attr("y1", yScale(yMed)).attr("y2", yScale(yMed))
     .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
 
   quadrantLabels.selectAll("*").remove();
-  const qlabels = [
-    { x: (xScale(xMed) + innerW) / 2, y: yScale(yMed) / 2, text: "NEGLECTED" },
-    { x: (xScale(xMed) + innerW) / 2, y: (yScale(yMed) + innerH) / 2, text: "ACTIVE" },
-    { x: xScale(xMed) / 2, y: yScale(yMed) / 2, text: "" },
-    { x: xScale(xMed) / 2, y: (yScale(yMed) + innerH) / 2, text: "" },
-  ];
-  qlabels.filter(q => q.text).forEach(q => {
-    quadrantLabels.append("text")
-      .attr("class", "quadrant-label")
-      .attr("x", q.x).attr("y", q.y)
-      .text(q.text);
-  });
+  quadrantLabels.append("text").attr("class", "quadrant-label")
+    .attr("x", (xScale(xMed) + iw) / 2).attr("y", yScale(yMed) / 2).text("NEGLECTED");
+  quadrantLabels.append("text").attr("class", "quadrant-label")
+    .attr("x", (xScale(xMed) + iw) / 2).attr("y", (yScale(yMed) + ih) / 2).text("ACTIVE");
 
   const color = d => {
     const highPop = d.vote >= xMed;
@@ -520,7 +664,7 @@ function showTooltip(ev, d) {
   const yVal = d[yField];
   const yLabel = yField === "days_since_upload" ? "Days since upload" : "Oldest RC bug age";
   const lines = [
-    `<div class="pkg-name">${d.source}</div>`,
+    `<div class="pkg-name">${d.display_name || d.source}</div>`,
     `<div class="pkg-maint">${d.maintainer || ""}</div>`,
     `<div class="pkg-stat"><b>${d.vote}</b> popcon votes &middot; <b>${d.insts.toLocaleString()}</b> installs</div>`,
     `<div class="pkg-stat"><b>${Math.round(yVal)}</b> ${yLabel.toLowerCase()}</div>`,
@@ -569,9 +713,18 @@ document.getElementById("min-vote").addEventListener("input", function () {
   render();
 });
 
+document.getElementById("dot-size").addEventListener("input", function () {
+  dotSizeMultiplier = +this.value;
+  document.getElementById("dot-size-val").textContent = dotSizeMultiplier.toFixed(1) + "x";
+  const data = getFiltered();
+  const maxInst = d3.max(data, d => d.insts) || 1;
+  rScale.domain([0, maxInst]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
+  pointsG.selectAll("circle").attr("r", d => rScale(d.insts));
+});
+
 document.getElementById("search").addEventListener("input", function () {
   searchQuery = this.value.trim().toLowerCase();
-  render();
+  updateSidebar();
 });
 
 window.addEventListener("resize", render);
