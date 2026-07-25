@@ -2,9 +2,9 @@
 """Merge UDD data with Arch version comparison into a single precomputed JSON.
 
 Usage:
-    python3 fetch_data.py          # fetch UDD data -> data/packages_raw.json
-    python3 fetch_arch.py          # fetch Arch DB   -> data/arch_versions.json
-    python3 build.py               # merge + precompute -> data/packages.json
+    python fetch_data.py          # fetch UDD data -> data/packages_raw.json
+    python fetch_arch.py          # fetch Arch DB   -> data/arch_versions.json
+    python build.py               # merge + precompute -> data/packages.json
 
 The output schema is documented in schema.json.
 """
@@ -13,6 +13,8 @@ import json
 import re
 import sys
 from datetime import datetime, timezone
+
+from semver import Version
 
 
 def parse_debian_upstream(version_str):
@@ -38,74 +40,60 @@ def parse_arch_upstream(version_str):
     return v
 
 
-def normalize_version(v):
-    v = v.strip()
-    v = re.sub(r"^v", "", v)
-    return v
+def to_semver(version_str):
+    """Try to parse a version string into a semver.Version.
 
-
-def version_to_tuple(v):
-    parts = []
-    for part in re.split(r"[.\-]", v):
-        try:
-            parts.append((0, int(part)))
-        except ValueError:
-            parts.append((1, part))
-    return parts
-
-
-def parse_semver(v):
-    """Extract (major, minor, patch) as ints from a version string.
-
-    Non-numeric components are treated as 0.
-    Missing components default to 0.
+    Handles versions that aren't strictly semver:
+    - Strips leading 'v'
+    - Pads missing components (1.0 -> 1.0.0)
+    - Strips pre-release/build noise that semver can't handle
     """
-    v = normalize_version(v)
-    # Split on dots and hyphens, keep only numeric parts
-    nums = []
-    for part in re.split(r"[.\-]", v):
-        try:
-            nums.append(int(part))
-        except ValueError:
-            break  # stop at first non-numeric (e.g. "rc1", "beta")
-    while len(nums) < 3:
-        nums.append(0)
-    return tuple(nums[:3])
+    if not version_str:
+        return None
+    v = version_str.strip()
+    v = re.sub(r"^v", "", v)
+    # Try strict parse first
+    try:
+        return Version.parse(v)
+    except ValueError:
+        pass
+    # Try padding to 3 components
+    parts = v.split(".")
+    if len(parts) == 1:
+        v = f"{v}.0.0"
+    elif len(parts) == 2:
+        v = f"{v}.0"
+    try:
+        return Version.parse(v)
+    except ValueError:
+        pass
+    # Strip pre-release suffixes like -rc1, -beta, .dev1
+    v = re.sub(r"[-.](rc|alpha|beta|dev|pre|post)\d*$", "", v, flags=re.IGNORECASE)
+    # Strip trailing non-semver parts
+    v = re.sub(r"[^+\-0-9.].*$", "", v)
+    # Re-pad
+    parts = v.split(".")
+    if len(parts) == 2:
+        v = f"{v}.0"
+    try:
+        return Version.parse(v)
+    except ValueError:
+        return None
 
 
 def version_delta(debian_upstream, arch_upstream):
     """Compute how far behind Debian is from Arch as a single number.
 
-    Uses weighted semver distance: major*100 + minor*10 + patch.
-    Returns None if versions can't be compared.
+    Uses semver major/minor/patch distance, weighted: major*100 + minor*10 + patch.
+    Returns None if versions can't be compared or Arch is not newer.
     """
-    if not debian_upstream or not arch_upstream:
+    d = to_semver(debian_upstream)
+    a = to_semver(arch_upstream)
+    if not d or not a:
         return None
-    try:
-        d = parse_semver(debian_upstream)
-        a = parse_semver(arch_upstream)
-    except (ValueError, TypeError):
-        return None
-    # Only return positive deltas (Arch newer)
     if a <= d:
         return None
-    return (a[0] - d[0]) * 100 + (a[1] - d[1]) * 10 + (a[2] - d[2])
-
-
-def compare_versions(debian_upstream, arch_upstream):
-    """Returns True if Arch is newer, False if same/Debian-newer, None if incomparable."""
-    if not debian_upstream or not arch_upstream:
-        return None
-    d = normalize_version(debian_upstream)
-    a = normalize_version(arch_upstream)
-    if d == a:
-        return False
-    try:
-        d_tuple = version_to_tuple(d)
-        a_tuple = version_to_tuple(a)
-        return a_tuple > d_tuple
-    except TypeError:
-        return None
+    return (a.major - d.major) * 100 + (a.minor - d.minor) * 10 + (a.patch - d.patch)
 
 
 def build():
@@ -137,14 +125,20 @@ def build():
                     break
 
         arch_upstream = parse_arch_upstream(arch_version) if arch_version else None
-        behind = compare_versions(debian_upstream, arch_upstream) if debian_upstream and arch_upstream else None
+        delta = version_delta(debian_upstream, arch_upstream)
 
-        if behind is True:
+        behind = delta is not None
+        if behind:
             stats["behind"] += 1
-        elif behind is False:
-            if arch_upstream and debian_upstream and normalize_version(arch_upstream) != normalize_version(debian_upstream):
-                stats["debian_newer"] += 1
-            else:
+        elif arch_upstream and debian_upstream:
+            try:
+                d = to_semver(debian_upstream)
+                a = to_semver(arch_upstream)
+                if d and a and d > a:
+                    stats["debian_newer"] += 1
+                else:
+                    stats["same"] += 1
+            except Exception:
                 stats["same"] += 1
         else:
             stats["not_found"] += 1
@@ -166,6 +160,7 @@ def build():
             "arch_version": arch_version,
             "arch_upstream_version": arch_upstream,
             "behind_upstream": behind,
+            "version_delta": delta,
         }
         packages.append(entry)
 

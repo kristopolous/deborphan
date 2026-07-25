@@ -1,0 +1,14 @@
+[project]
+name = "debian-neglect-explorer"
+version = "0.1.0"
+description = "Interactive scatter plot of Debian package staleness vs popularity"
+requires-python = ">=3.10"
+license = "GPL-3.0-only"
+dependencies = [
+    "semver>=3.0",
+]
+
+[project.scripts]
+fetch-udd = "fetch_data:main"
+fetch-arch = "fetch_arch:main"
+build = "build:main"
