@@ -271,20 +271,6 @@ header .controls {
 .grid path { stroke: none; }
 .brush .selection { fill: #58a6ff; fill-opacity: 0.15; stroke: #58a6ff; stroke-width: 1; }
 .brush .overlay { cursor: crosshair; }
-.zoom-hint {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font-size: 11px;
-  color: #484f58;
-  z-index: 10;
-  pointer-events: none;
-}
-
 #loading {
   position: absolute;
   inset: 0;
@@ -361,7 +347,6 @@ footer a:hover {
   }
   #sidebar { display: none; }
   .legend { bottom: 12px; left: 12px; padding: 8px 12px; font-size: 11px; }
-  .zoom-hint { display: none; }
   footer { padding: 10px; font-size: 11px; }
 }
 </style>
@@ -548,9 +533,6 @@ legendDiv.html(`
   <div class="legend-item"><span class="legend-dot" style="background:#d29922"></span> Niche &amp; neglected</div>
   <div class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span> Niche &amp; active</div>
 `);
-
-d3.select("#plot-area").append("div").attr("class", "zoom-hint")
-  .html("Scroll to zoom &middot; Drag to pan &middot; Shift+drag to brush-select");
 
 const brush = d3.brush()
   .on("start brush end", onBrush);
