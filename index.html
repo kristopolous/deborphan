@@ -393,19 +393,13 @@ footer a:hover {
   </div>
   <div class="controls">
     <input type="text" id="search" placeholder="Search&hellip;" autocomplete="off" spellcheck="false">
-    <label>
-      View
-      <select id="view-select">
-        <option value="packages" selected>Packages</option>
-        <option value="maintainers">Maintainers</option>
-      </select>
-    </label>
     <label id="y-axis-label">
       Y-axis
       <select id="y-axis-select">
         <option value="days_since_upload" selected>Days Since Upload</option>
         <option value="oldest_rc_bug_age">Oldest RC Bug Age</option>
         <option value="version_delta">Behind Upstream (Version Delta)</option>
+        <option value="maintainer_burden">Maintainer Burden</option>
       </select>
     </label>
     <label>
@@ -452,7 +446,6 @@ const MARGIN = { top: 40, right: 30, bottom: 60, left: 70 };
 
 let allData = [];
 let allMaintainers = [];
-let viewMode = "packages"; // "packages" or "maintainers"
 let yField = "days_since_upload";
 let hideNoBugs = true;
 let minVote = 0;
@@ -461,7 +454,7 @@ let selectedCircle = null;
 const visitedCircles = new Set();
 
 // Restore state from URL hash
-const validYFields = ["days_since_upload", "oldest_rc_bug_age", "version_delta"];
+const validYFields = ["days_since_upload", "oldest_rc_bug_age", "version_delta", "maintainer_burden"];
 if (location.hash) {
   const hashField = location.hash.slice(1);
   if (validYFields.includes(hashField)) {
@@ -472,20 +465,26 @@ if (location.hash) {
 
 function markVisited(circle) {
   if (!circle) return;
-  const src = circle.datum().source;
-  if (visitedCircles.has(src)) return;
-  visitedCircles.add(src);
+  const d = circle.datum();
+  if (!d) return;
+  const key = d.source || d.maintainer;
+  if (visitedCircles.has(key)) return;
+  visitedCircles.add(key);
   circle
     .attr("stroke-opacity", 0.5)
     .attr("fill-opacity", 0.4);
 }
 
 function selectCircle(circle) {
-  if (selectedCircle && !visitedCircles.has(selectedCircle.datum().source)) {
-    selectedCircle
-      .attr("stroke", selectedCircle.attr("data-orig-stroke"))
-      .attr("stroke-width", 0.5)
-      .attr("stroke-opacity", 0.3);
+  if (selectedCircle) {
+    const d = selectedCircle.datum();
+    const prevKey = d ? (d.source || d.maintainer) : null;
+    if (prevKey && !visitedCircles.has(prevKey)) {
+      selectedCircle
+        .attr("stroke", selectedCircle.attr("data-orig-stroke"))
+        .attr("stroke-width", 0.5)
+        .attr("stroke-opacity", 0.3);
+    }
   }
   selectedCircle = circle;
   if (selectedCircle) {
@@ -686,7 +685,7 @@ function innerH() {
 }
 
 function getFiltered() {
-  if (viewMode === "maintainers") {
+  if (yField === "maintainer_burden") {
     return allMaintainers.filter(d => {
       if (d.avg_version_delta == null || d.avg_version_delta <= 0) return false;
       if (d.package_count < 2) return false;
@@ -730,7 +729,7 @@ function updateSidebar() {
   const countEl = document.getElementById("match-count");
   const headerLabel = document.querySelector("#sidebar-header span:first-child");
 
-  if (viewMode === "maintainers") {
+  if (yField === "maintainer_burden") {
     headerLabel.textContent = "Matching maintainers";
     let matched = data;
     if (searchQuery) {
@@ -739,16 +738,18 @@ function updateSidebar() {
     matched.sort((a, b) => b.package_count - a.package_count);
     countEl.textContent = matched.length;
     list.innerHTML = matched.slice(0, 500).map(d => {
-      const deltaDisplay = d.avg_version_delta != null ? `${d.avg_version_delta}v` : "n/a";
+      const isTeam = d.maintainer.startsWith("Debian");
+      const icon = isTeam ? "\u{1F465}" : "\u{1F464}";
       return `<li data-maintainer="${d.maintainer}">
-        <span class="name">${d.maintainer}</span>
-        <span class="meta">${d.package_count} pkgs &middot; ${deltaDisplay} behind</span>
+        <span class="name">${icon} ${d.maintainer}</span>
+        <span class="meta">${d.package_count} pkgs</span>
       </li>`;
     }).join("");
     list.querySelectorAll("li").forEach(li => {
       li.addEventListener("click", () => {
         const maint = li.dataset.maintainer;
-        window.open(`https://tracker.debian.org/pkg/${encodeURIComponent(maint)}`, "_blank");
+        const email = (maint.match(/<(.+?)>/) || [])[1] || maint;
+        window.open(`https://qa.debian.org/developer.php?login=${encodeURIComponent(email)}`, "_blank");
       });
     });
     pointsG.selectAll("circle")
@@ -849,8 +850,9 @@ function render(resetZoom) {
   const iw = innerW();
   const ih = innerH();
 
-  if (viewMode === "maintainers") return renderMaintainers(iw, ih);
+  if (yField === "maintainer_burden") return renderMaintainers(iw, ih);
 
+  pointsG.selectAll("circle").remove();
   const data = getFiltered();
   if (data.length === 0) {
     pointsG.selectAll("circle").remove();
@@ -936,7 +938,7 @@ function render(resetZoom) {
     .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); clearTimeout(tooltipHideTimer); if (!isTouchDevice) showTooltip(ev, d); })
     .on("mousemove", isTouchDevice ? null : moveTooltip)
     .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) tooltipHideTimer = setTimeout(hideTooltip, 300); })
-    .on("click", (ev, d) => {
+    .on("click", function (ev, d) {
       markVisited(d3.select(this));
       if (isTouchDevice) {
         showTooltip(ev, d);
@@ -969,6 +971,7 @@ function renderMaintainers(iw, ih) {
     return;
   }
 
+  pointsG.selectAll("circle").remove();
   const pkgCounts = data.map(d => d.package_count).filter(v => v > 0);
   const yVals = data.map(d => d.avg_version_delta).filter(v => v > 0);
 
@@ -1017,15 +1020,19 @@ function renderMaintainers(iw, ih) {
     return "#58a6ff";
   };
 
-  const circles = pointsG.selectAll("circle").data(data, d => d.maintainer);
+  const isTeam = d => d.maintainer.startsWith("Debian");
 
-  circles.exit().remove();
+  const symGen = d3.symbol().type(d => isTeam(d) ? d3.symbolTriangle : d3.symbolCircle);
+  const symScale = d3.scaleSqrt().domain([0, maxBugs]).range([4 * dotSizeMultiplier, 16 * dotSizeMultiplier]);
 
-  circles.enter()
-    .append("circle")
-    .attr("r", d => rScale(d.total_bugs))
-    .attr("cx", d => xScale(d.package_count))
-    .attr("cy", d => yScale(d.avg_version_delta))
+  const paths = pointsG.selectAll("path").data(data, d => d.maintainer);
+
+  paths.exit().remove();
+
+  paths.enter()
+    .append("path")
+    .attr("d", d => { symGen.size(Math.PI * Math.pow(symScale(d.total_bugs), 2)); return symGen(); })
+    .attr("transform", d => `translate(${xScale(d.package_count)},${yScale(d.avg_version_delta)})`)
     .attr("fill", color)
     .attr("fill-opacity", 0.7)
     .attr("stroke", color)
@@ -1036,19 +1043,14 @@ function renderMaintainers(iw, ih) {
     .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); clearTimeout(tooltipHideTimer); if (!isTouchDevice) showMaintainerTooltip(ev, d); })
     .on("mousemove", isTouchDevice ? null : moveTooltip)
     .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) tooltipHideTimer = setTimeout(hideTooltip, 300); })
-    .on("click", (ev, d) => {
+    .on("click", function (ev, d) {
       markVisited(d3.select(this));
-      if (isTouchDevice) {
-        showMaintainerTooltip(ev, d);
-        ev.stopPropagation();
-      } else {
-        window.open(`https://tracker.debian.org/pkg/${encodeURIComponent(d.maintainer)}`, "_blank");
-      }
+      showMaintainerTooltip(ev, d);
+      ev.stopPropagation();
     })
-    .merge(circles)
-    .attr("r", d => rScale(d.total_bugs))
-    .attr("cx", d => xScale(d.package_count))
-    .attr("cy", d => yScale(d.avg_version_delta))
+    .merge(paths)
+    .attr("d", d => { symGen.size(Math.PI * Math.pow(symScale(d.total_bugs), 2)); return symGen(); })
+    .attr("transform", d => `translate(${xScale(d.package_count)},${yScale(d.avg_version_delta)})`)
     .attr("fill", color)
     .attr("stroke", color);
 
@@ -1087,18 +1089,17 @@ function showTooltip(ev, d) {
 }
 
 function showMaintainerTooltip(ev, d) {
+  const isTeam = d.maintainer.startsWith("Debian");
   const pkgList = d.packages.slice(0, 20).join(", ") + (d.packages.length > 20 ? ` +${d.packages.length - 20} more` : "");
   const lines = [
     `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
-    `<div class="pkg-name">${d.maintainer}</div>`,
+    `<div class="pkg-name">${isTeam ? "\u{1F465}" : "\u{1F464}"} ${d.maintainer}</div>`,
     `<div class="pkg-stat"><b>${d.package_count}</b> packages maintained</div>`,
-    d.avg_version_delta != null
-      ? `<div class="pkg-stat"><b>${d.avg_version_delta}</b> avg versions behind</div>`
-      : "",
     d.total_bugs > 0
       ? `<div class="pkg-stat"><b>${d.total_bugs}</b> total open RC bugs</div>`
       : "",
     `<div class="pkg-stat"><b>${d.total_insts.toLocaleString()}</b> total installs</div>`,
+    `<div class="pkg-stat"><a href="https://qa.debian.org/developer.php?login=${encodeURIComponent((d.maintainer.match(/<(.+?)>/) || [])[1] || d.maintainer)}" target="_blank">qa.debian.org &rarr;</a></div>`,
     `<div class="pkg-stat" style="font-size:11px;color:#8b949e;margin-top:4px">${pkgList}</div>`,
   ].filter(Boolean).join("");
   tooltip.innerHTML = lines;
@@ -1125,25 +1126,15 @@ function hideTooltip() {
 document.getElementById("y-axis-select").addEventListener("change", function () {
   yField = this.value;
   location.hash = yField;
-  render();
-});
-
-document.getElementById("view-select").addEventListener("change", function () {
-  viewMode = this.value;
-  const isMaintainer = viewMode === "maintainers";
-  document.getElementById("y-axis-label").style.display = isMaintainer ? "none" : "";
+  const isMaintainer = yField === "maintainer_burden";
   document.getElementById("hide-no-bugs").closest("label").style.display = isMaintainer ? "none" : "";
   document.querySelector(".slider-group").style.display = isMaintainer ? "none" : "";
   if (isMaintainer) {
     document.querySelector(".legend-title").textContent = "Maintainer Quadrants";
-    document.querySelectorAll(".legend-item")[0].querySelector(".legend-dot").style.background = "#f85149";
-    document.querySelectorAll(".legend-item")[0].textContent = "Overburdened";
-    document.querySelectorAll(".legend-item")[1].querySelector(".legend-dot").style.background = "#3fb950";
-    document.querySelectorAll(".legend-item")[1].textContent = "Healthy";
-    document.querySelectorAll(".legend-item")[2].querySelector(".legend-dot").style.background = "#d29922";
-    document.querySelectorAll(".legend-item")[2].textContent = "Few packages & behind";
-    document.querySelectorAll(".legend-item")[3].querySelector(".legend-dot").style.background = "#58a6ff";
-    document.querySelectorAll(".legend-item")[3].textContent = "Few packages & current";
+    document.querySelectorAll(".legend-item")[0].innerHTML = '<span class="legend-dot" style="background:#f85149"></span> Overburdened';
+    document.querySelectorAll(".legend-item")[1].innerHTML = '<span class="legend-dot" style="background:#3fb950"></span> Healthy';
+    document.querySelectorAll(".legend-item")[2].innerHTML = '<span class="legend-dot" style="background:#d29922"></span> Few packages &amp; behind';
+    document.querySelectorAll(".legend-item")[3].innerHTML = '<span class="legend-dot" style="background:#58a6ff"></span> Few packages &amp; current';
   } else {
     document.querySelector(".legend-title").textContent = "Quadrants";
     document.querySelectorAll(".legend-item")[0].innerHTML = '<span class="legend-dot" style="background:#f85149"></span> Widely installed &amp; neglected';
