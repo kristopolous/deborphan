@@ -1,6 +1,6 @@
 # Debian Neglect Explorer
 
-An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux, FreeBSD Ports, Homebrew, pkgsrc, and Repology to identify packages genuinely behind upstream.
+An interactive D3 scatter plot that maps Debian source packages by install count vs. staleness, with version-comparison data from Arch Linux, FreeBSD Ports, Homebrew, pkgsrc, and Repology. Includes a maintainer burden view to identify over-encumbered teams and individuals.
 
 ## Quick Start
 
@@ -74,31 +74,42 @@ Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads.
 
 ## How It Works
 
-The pipeline compares Debian package versions against external sources (Arch, FreeBSD, Homebrew, pkgsrc, Repology) to compute a **version delta** — how many semver versions behind Debian is. This distinguishes packages that are genuinely neglected (behind upstream) from those that are simply old (upstream is also stagnant).
+The pipeline compares Debian package versions against external sources (Arch, FreeBSD, Homebrew, pkgsrc, Repology) to compute a **version delta** — how many semver versions behind Debian is. The formula is `(other_major - deb_major)*100 + (other_minor - deb_minor)*10 + (other_patch - deb_patch)`. Date-based versions (major > 1900) are excluded. The best (largest) delta across all sources is kept per package.
+
+The **Maintainer Burden** view aggregates packages by maintainer email, computing average version delta and total RC bugs. Teams are identified by name matching (`/^Debian|Team$/`).
 
 The comparison framework is extensible — see `comparisons/` directory to add new sources.
 
 ## Features
 
+### Package View
 - Log-log scatter plot, one dot per source package
-- X-axis: install count (how widely deployed)
+- X-axis: install count (popcon)
 - Y-axis: days since last upload, oldest open RC bug age, or **version delta** (how far behind upstream)
 - Dot size: number of open RC bugs (bigger = more bugs)
 - Quadrant dividers at the median (neglected, active, etc.)
-- Hover tooltips showing installs, votes, version info, bugs, maintainer, VCS status
-- Tooltip is interactive — click the tracker link inside it
-- Click dot to open tracker.debian.org/pkg/{name} (or use tooltip link on mobile)
-- Y-axis toggle: three metrics available
+- Click dot to open tracker.debian.org/pkg/{name}
 - Hide zero-bug packages (on by default)
-- Min installs slider to filter low-deployment packages
 - Dot size multiplier slider
+
+### Maintainer Burden View
+- X-axis: number of packages maintained
+- Y-axis: average version delta vs upstream (best of all comparison sources)
+- Shape: triangles = Debian teams, circles = individuals
+- Size: total open RC bugs across all packages
+- Quadrant split at median: overburdened = many packages + far behind upstream
+- Click to open qa.debian.org/developer page
+
+### Common
+- Hover tooltips with details
 - Search with regex support (try `^alsa$`, `alac|7zip`, etc.)
 - Search finds packages across all data regardless of filters
 - Source package names resolve to binary names (e.g. rust-alacritty shows as alacritty)
 - Scroll-wheel zoom and drag-to-pan, axes extend beyond data range
 - Shift+drag brush-select to filter the package list
-- Sidebar lists matching packages with install/staleness stats
+- Sidebar lists matching packages/maintainers
 - Dark theme (GitHub-dark style)
+- Dynamic guide with view-specific axis/size documentation
 
 ## Files
 
