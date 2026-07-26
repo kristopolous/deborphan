@@ -392,8 +392,15 @@ footer a:hover {
     </div>
   </div>
   <div class="controls">
-    <input type="text" id="search" placeholder="Search packages&hellip;" autocomplete="off" spellcheck="false">
+    <input type="text" id="search" placeholder="Search&hellip;" autocomplete="off" spellcheck="false">
     <label>
+      View
+      <select id="view-select">
+        <option value="packages" selected>Packages</option>
+        <option value="maintainers">Maintainers</option>
+      </select>
+    </label>
+    <label id="y-axis-label">
       Y-axis
       <select id="y-axis-select">
         <option value="days_since_upload" selected>Days Since Upload</option>
@@ -444,6 +451,8 @@ const DATA_URL = "data/packages.json";
 const MARGIN = { top: 40, right: 30, bottom: 60, left: 70 };
 
 let allData = [];
+let allMaintainers = [];
+let viewMode = "packages"; // "packages" or "maintainers"
 let yField = "days_since_upload";
 let hideNoBugs = true;
 let minVote = 0;
@@ -677,6 +686,14 @@ function innerH() {
 }
 
 function getFiltered() {
+  if (viewMode === "maintainers") {
+    return allMaintainers.filter(d => {
+      if (d.avg_version_delta == null || d.avg_version_delta <= 0) return false;
+      if (d.package_count < 2) return false;
+      if (searchQuery && !matchesSearchMaintainer(d)) return true;
+      return true;
+    });
+  }
   return allData.filter(d => {
     if (d[yField] == null || d[yField] <= 0) return false;
     if (d.insts <= 0) return false;
@@ -697,10 +714,52 @@ function matchesSearch(d) {
   }
 }
 
+function matchesSearchMaintainer(d) {
+  if (!searchQuery) return true;
+  try {
+    const re = new RegExp(searchQuery);
+    return re.test(d.maintainer) || d.packages.some(p => re.test(p));
+  } catch {
+    return d.maintainer.includes(searchQuery) || d.packages.some(p => p.includes(searchQuery));
+  }
+}
+
 function updateSidebar() {
   const data = getFiltered();
   const list = document.querySelector("#package-list ul");
   const countEl = document.getElementById("match-count");
+  const headerLabel = document.querySelector("#sidebar-header span:first-child");
+
+  if (viewMode === "maintainers") {
+    headerLabel.textContent = "Matching maintainers";
+    let matched = data;
+    if (searchQuery) {
+      matched = allMaintainers.filter(matchesSearchMaintainer);
+    }
+    matched.sort((a, b) => b.package_count - a.package_count);
+    countEl.textContent = matched.length;
+    list.innerHTML = matched.slice(0, 500).map(d => {
+      const deltaDisplay = d.avg_version_delta != null ? `${d.avg_version_delta}v` : "n/a";
+      return `<li data-maintainer="${d.maintainer}">
+        <span class="name">${d.maintainer}</span>
+        <span class="meta">${d.package_count} pkgs &middot; ${deltaDisplay} behind</span>
+      </li>`;
+    }).join("");
+    list.querySelectorAll("li").forEach(li => {
+      li.addEventListener("click", () => {
+        const maint = li.dataset.maintainer;
+        window.open(`https://tracker.debian.org/pkg/${encodeURIComponent(maint)}`, "_blank");
+      });
+    });
+    pointsG.selectAll("circle")
+      .attr("opacity", d => {
+        if (!searchQuery) return 1;
+        return matchesSearchMaintainer(d) ? 1 : 0.06;
+      });
+    return;
+  }
+
+  headerLabel.textContent = "Matching packages";
 
   if (searchQuery) {
     const searchResults = allData.filter(matchesSearch);
@@ -789,6 +848,8 @@ function render(resetZoom) {
 
   const iw = innerW();
   const ih = innerH();
+
+  if (viewMode === "maintainers") return renderMaintainers(iw, ih);
 
   const data = getFiltered();
   if (data.length === 0) {
@@ -894,6 +955,106 @@ function render(resetZoom) {
   updateSidebar();
 }
 
+function renderMaintainers(iw, ih) {
+  const data = getFiltered();
+  if (data.length === 0) {
+    pointsG.selectAll("circle").remove();
+    xAxisG.selectAll("*").remove();
+    yAxisG.selectAll("*").remove();
+    gridX.selectAll("*").remove();
+    gridY.selectAll("*").remove();
+    quadrantG.selectAll("*").remove();
+    quadrantLabels.selectAll("*").remove();
+    updateSidebar();
+    return;
+  }
+
+  const pkgCounts = data.map(d => d.package_count).filter(v => v > 0);
+  const yVals = data.map(d => d.avg_version_delta).filter(v => v > 0);
+
+  xScale.domain(d3.extent(pkgCounts)).range([0, iw]);
+  yScale.domain(d3.extent(yVals)).range([ih, 0]);
+
+  const maxBugs = d3.max(data, d => d.total_bugs) || 1;
+  rScale.domain([0, maxBugs]).range([2 * dotSizeMultiplier, 10 * dotSizeMultiplier]);
+
+  xAxisG.attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale).ticks(6, "~s").tickSizeOuter(0));
+  yAxisG.call(d3.axisLeft(yScale).ticks(6, "~s").tickSizeOuter(0));
+
+  gridX.attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale).ticks(6).tickSize(-ih).tickFormat(""));
+  gridY.call(d3.axisLeft(yScale).ticks(6).tickSize(-iw).tickFormat(""));
+
+  xAxisLabel.attr("x", iw / 2).attr("y", ih + 48).text("Packages maintained (log)");
+  yAxisLabel.text("Avg versions behind (log)").attr("x", -ih / 2).attr("y", -52);
+
+  const xMed = median(pkgCounts);
+  const yMed = median(yVals);
+
+  quadrantG.selectAll("*").remove();
+  quadrantG.append("line")
+    .attr("x1", xScale(xMed)).attr("x2", xScale(xMed))
+    .attr("y1", 0).attr("y2", ih)
+    .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+  quadrantG.append("line")
+    .attr("x1", 0).attr("x2", iw)
+    .attr("y1", yScale(yMed)).attr("y2", yScale(yMed))
+    .attr("stroke", "#30363d").attr("stroke-dasharray", "4,4");
+
+  quadrantLabels.selectAll("*").remove();
+  quadrantLabels.append("text").attr("class", "quadrant-label")
+    .attr("x", (xScale(xMed) + iw) / 2).attr("y", yScale(yMed) / 2).text("OVERBURDENED");
+  quadrantLabels.append("text").attr("class", "quadrant-label")
+    .attr("x", (xScale(xMed) + iw) / 2).attr("y", (yScale(yMed) + ih) / 2).text("HEALTHY");
+
+  const color = d => {
+    const highCount = d.package_count >= xMed;
+    const stale = d.avg_version_delta >= yMed;
+    if (highCount && stale) return "#f85149";
+    if (highCount && !stale) return "#3fb950";
+    if (!highCount && stale) return "#d29922";
+    return "#58a6ff";
+  };
+
+  const circles = pointsG.selectAll("circle").data(data, d => d.maintainer);
+
+  circles.exit().remove();
+
+  circles.enter()
+    .append("circle")
+    .attr("r", d => rScale(d.total_bugs))
+    .attr("cx", d => xScale(d.package_count))
+    .attr("cy", d => yScale(d.avg_version_delta))
+    .attr("fill", color)
+    .attr("fill-opacity", 0.7)
+    .attr("stroke", color)
+    .attr("data-orig-stroke", color)
+    .attr("stroke-width", 0.5)
+    .attr("stroke-opacity", 0.3)
+    .style("cursor", "pointer")
+    .on("mouseenter", function (ev, d) { selectCircle(d3.select(this)); clearTimeout(tooltipHideTimer); if (!isTouchDevice) showMaintainerTooltip(ev, d); })
+    .on("mousemove", isTouchDevice ? null : moveTooltip)
+    .on("mouseleave", function () { selectCircle(null); if (!isTouchDevice) tooltipHideTimer = setTimeout(hideTooltip, 300); })
+    .on("click", (ev, d) => {
+      markVisited(d3.select(this));
+      if (isTouchDevice) {
+        showMaintainerTooltip(ev, d);
+        ev.stopPropagation();
+      } else {
+        window.open(`https://tracker.debian.org/pkg/${encodeURIComponent(d.maintainer)}`, "_blank");
+      }
+    })
+    .merge(circles)
+    .attr("r", d => rScale(d.total_bugs))
+    .attr("cx", d => xScale(d.package_count))
+    .attr("cy", d => yScale(d.avg_version_delta))
+    .attr("fill", color)
+    .attr("stroke", color);
+
+  updateSidebar();
+}
+
 function showTooltip(ev, d) {
   const yVal = d[yField];
   const yLabel = yField === "days_since_upload"
@@ -925,6 +1086,26 @@ function showTooltip(ev, d) {
   moveTooltip(ev);
 }
 
+function showMaintainerTooltip(ev, d) {
+  const pkgList = d.packages.slice(0, 20).join(", ") + (d.packages.length > 20 ? ` +${d.packages.length - 20} more` : "");
+  const lines = [
+    `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
+    `<div class="pkg-name">${d.maintainer}</div>`,
+    `<div class="pkg-stat"><b>${d.package_count}</b> packages maintained</div>`,
+    d.avg_version_delta != null
+      ? `<div class="pkg-stat"><b>${d.avg_version_delta}</b> avg versions behind</div>`
+      : "",
+    d.total_bugs > 0
+      ? `<div class="pkg-stat"><b>${d.total_bugs}</b> total open RC bugs</div>`
+      : "",
+    `<div class="pkg-stat"><b>${d.total_insts.toLocaleString()}</b> total installs</div>`,
+    `<div class="pkg-stat" style="font-size:11px;color:#8b949e;margin-top:4px">${pkgList}</div>`,
+  ].filter(Boolean).join("");
+  tooltip.innerHTML = lines;
+  tooltip.classList.add("show");
+  moveTooltip(ev);
+}
+
 function moveTooltip(ev) {
   let x = ev.pageX + 14;
   let y = ev.pageY - 10;
@@ -944,6 +1125,32 @@ function hideTooltip() {
 document.getElementById("y-axis-select").addEventListener("change", function () {
   yField = this.value;
   location.hash = yField;
+  render();
+});
+
+document.getElementById("view-select").addEventListener("change", function () {
+  viewMode = this.value;
+  const isMaintainer = viewMode === "maintainers";
+  document.getElementById("y-axis-label").style.display = isMaintainer ? "none" : "";
+  document.getElementById("hide-no-bugs").closest("label").style.display = isMaintainer ? "none" : "";
+  document.querySelector(".slider-group").style.display = isMaintainer ? "none" : "";
+  if (isMaintainer) {
+    document.querySelector(".legend-title").textContent = "Maintainer Quadrants";
+    document.querySelectorAll(".legend-item")[0].querySelector(".legend-dot").style.background = "#f85149";
+    document.querySelectorAll(".legend-item")[0].textContent = "Overburdened";
+    document.querySelectorAll(".legend-item")[1].querySelector(".legend-dot").style.background = "#3fb950";
+    document.querySelectorAll(".legend-item")[1].textContent = "Healthy";
+    document.querySelectorAll(".legend-item")[2].querySelector(".legend-dot").style.background = "#d29922";
+    document.querySelectorAll(".legend-item")[2].textContent = "Few packages & behind";
+    document.querySelectorAll(".legend-item")[3].querySelector(".legend-dot").style.background = "#58a6ff";
+    document.querySelectorAll(".legend-item")[3].textContent = "Few packages & current";
+  } else {
+    document.querySelector(".legend-title").textContent = "Quadrants";
+    document.querySelectorAll(".legend-item")[0].innerHTML = '<span class="legend-dot" style="background:#f85149"></span> Widely installed &amp; neglected';
+    document.querySelectorAll(".legend-item")[1].innerHTML = '<span class="legend-dot" style="background:#3fb950"></span> Widely installed &amp; active';
+    document.querySelectorAll(".legend-item")[2].innerHTML = '<span class="legend-dot" style="background:#d29922"></span> Niche &amp; neglected';
+    document.querySelectorAll(".legend-item")[3].innerHTML = '<span class="legend-dot" style="background:#58a6ff"></span> Niche &amp; active';
+  }
   render();
 });
 
@@ -993,7 +1200,8 @@ fetch(DATA_URL).then(resp => {
     return;
   }
   allData = data.packages;
-  loadingEl.textContent = `Loaded ${allData.length.toLocaleString()} packages`;
+  allMaintainers = data.maintainers || [];
+  loadingEl.textContent = `Loaded ${allData.length.toLocaleString()} packages, ${allMaintainers.length.toLocaleString()} maintainers`;
   loadingEl.style.display = "flex";
   loadingEl.style.color = "#3fb950";
   setTimeout(() => { loadingEl.style.display = "none"; }, 2000);

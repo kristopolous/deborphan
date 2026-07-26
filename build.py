@@ -93,10 +93,41 @@ def build():
 
         packages.append(entry)
 
+    # Aggregate by maintainer
+    maintainer_map = {}
+    for pkg in packages:
+        maint = pkg.get("maintainer")
+        if not maint:
+            continue
+        if maint not in maintainer_map:
+            maintainer_map[maint] = {"maintainer": maint, "packages": [], "deltas": [], "total_bugs": 0, "total_insts": 0}
+        m = maintainer_map[maint]
+        m["packages"].append(pkg["source"])
+        m["total_bugs"] += pkg.get("rc_bug_count", 0)
+        m["total_insts"] += pkg.get("insts", 0)
+        if pkg.get("version_delta") is not None:
+            m["deltas"].append(pkg["version_delta"])
+
+    maintainers = []
+    for m in maintainer_map.values():
+        if len(m["packages"]) < 2:
+            continue
+        maintainers.append({
+            "maintainer": m["maintainer"],
+            "package_count": len(m["packages"]),
+            "avg_version_delta": round(sum(m["deltas"]) / len(m["deltas"]), 1) if m["deltas"] else None,
+            "total_bugs": m["total_bugs"],
+            "total_insts": m["total_insts"],
+            "packages": m["packages"],
+        })
+
+    maintainers.sort(key=lambda m: m["package_count"], reverse=True)
+
     output = {
         "fetched_at": raw.get("fetched_at", datetime.now(timezone.utc).isoformat()),
         "package_count": len(packages),
         "packages": packages,
+        "maintainers": maintainers,
     }
 
     with open("data/packages.json", "w") as f:
