@@ -3,13 +3,8 @@
   "title": "Debian Package Neglect Explorer",
   "description": "Precomputed package data for the neglect explorer scatter plot.",
   "type": "object",
-  "required": ["fetched_at", "package_count", "packages"],
+  "required": ["package_count", "packages", "maintainers"],
   "properties": {
-    "fetched_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "ISO 8601 timestamp of when UDD data was fetched."
-    },
     "package_count": {
       "type": "integer",
       "description": "Total number of packages in the array."
@@ -120,6 +115,41 @@
           "best_comparison": {
             "type": ["string", "null"],
             "description": "Which source provided the best (largest) version delta: 'arch', 'freebsd', 'homebrew', 'pkgsrc', or 'repology'. Null if behind_upstream is false."
+          }
+        }
+      }
+    },
+    "maintainers": {
+      "type": "array",
+      "description": "Aggregated maintainer data (2+ packages only).",
+      "items": {
+        "type": "object",
+        "required": ["maintainer", "package_count"],
+        "properties": {
+          "maintainer": {
+            "type": "string",
+            "description": "Maintainer name and email."
+          },
+          "package_count": {
+            "type": "integer",
+            "description": "Number of source packages maintained."
+          },
+          "avg_version_delta": {
+            "type": ["number", "null"],
+            "description": "Average version delta across packages that have comparison data. Null if none."
+          },
+          "total_bugs": {
+            "type": "integer",
+            "description": "Total open RC bugs across all packages."
+          },
+          "total_insts": {
+            "type": "integer",
+            "description": "Total install count across all packages."
+          },
+          "packages": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of source package names."
           }
         }
       }

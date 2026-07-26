@@ -11,7 +11,6 @@ The output schema is documented in schema.json.
 
 import json
 import sys
-from datetime import datetime, timezone
 
 from comparisons import parse_debian_upstream, to_semver, compute_version_delta
 from comparisons.arch import ArchSource
