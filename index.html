@@ -384,7 +384,8 @@ footer a:hover {
         <li><b>Scroll</b> to zoom, <b>drag</b> to pan. The axes extend beyond the data.</li>
         <li><b>Shift+drag</b> to brush-select a region. The sidebar lists only those packages.</li>
         <li><b>Search</b> by package name. Accepts regex: <code>^alsa$</code> for exact, <code>alac|7zip</code> for multiple.</li>
-        <li><b>Y-axis</b> switches between days since upload and oldest RC bug age.</li>
+        <li><b>Y-axis</b> switches between days since upload, oldest RC bug age, version delta, or <b>Maintainer Burden</b> (teams vs individuals).</li>
+        <li>In Maintainer Burden view, <b>triangles</b> are Debian teams, <b>circles</b> are individual maintainers.</li>
         <li><b>X-axis</b> shows install count (popcon). Dot size shows open RC bugs.</li>
         <li><b>Min installs</b> slider filters out low-install packages.</li>
         <li><b>Dot size</b> slider scales circles by number of open RC bugs.</li>
@@ -392,16 +393,6 @@ footer a:hover {
     </div>
   </div>
   <div class="controls">
-    <input type="text" id="search" placeholder="Search&hellip;" autocomplete="off" spellcheck="false">
-    <label id="y-axis-label">
-      Y-axis
-      <select id="y-axis-select">
-        <option value="days_since_upload" selected>Days Since Upload</option>
-        <option value="oldest_rc_bug_age">Oldest RC Bug Age</option>
-        <option value="version_delta">Behind Upstream (Version Delta)</option>
-        <option value="maintainer_burden">Maintainer Burden</option>
-      </select>
-    </label>
     <label>
       <input type="checkbox" id="hide-no-bugs" checked>
       Hide zero-bug packages
@@ -412,12 +403,17 @@ footer a:hover {
         <input type="range" id="dot-size" min="0.5" max="5" value="0.8" step="0.1">
         <span id="dot-size-val">0.8x</span>
       </label>
-      <label>
-        Min installs
-        <input type="range" id="min-vote" min="0" max="500" value="0" step="10">
-        <span id="min-vote-val">0</span>
-      </label>
     </div>
+    <label id="y-axis-label">
+      Y-axis
+      <select id="y-axis-select">
+        <option value="days_since_upload" selected>Days Since Upload</option>
+        <option value="oldest_rc_bug_age">Oldest RC Bug Age</option>
+        <option value="version_delta">Behind Upstream (Version Delta)</option>
+        <option value="maintainer_burden">Maintainer Burden</option>
+      </select>
+    </label>
+    <input type="text" id="search" placeholder="Search&hellip;" autocomplete="off" spellcheck="false">
   </div>
 </header>
 
@@ -448,7 +444,6 @@ let allData = [];
 let allMaintainers = [];
 let yField = "days_since_upload";
 let hideNoBugs = true;
-let minVote = 0;
 let selectedRegion = null;
 let selectedCircle = null;
 const visitedCircles = new Set();
@@ -698,7 +693,6 @@ function getFiltered() {
     if (d.insts <= 0) return false;
     if (searchQuery && matchesSearch(d)) return true;
     if (hideNoBugs && d.rc_bug_count === 0) return false;
-    if (d.insts < minVote) return false;
     return true;
   });
 }
@@ -738,7 +732,7 @@ function updateSidebar() {
     matched.sort((a, b) => b.package_count - a.package_count);
     countEl.textContent = matched.length;
     list.innerHTML = matched.slice(0, 500).map(d => {
-      const isTeam = d.maintainer.startsWith("Debian");
+      const isTeam = /^Debian|Team$/.test(d.maintainer);
       const icon = isTeam ? "\u{1F465}" : "\u{1F464}";
       return `<li data-maintainer="${d.maintainer}">
         <span class="name">${icon} ${d.maintainer}</span>
@@ -853,6 +847,7 @@ function render(resetZoom) {
   if (yField === "maintainer_burden") return renderMaintainers(iw, ih);
 
   pointsG.selectAll("circle").remove();
+  pointsG.selectAll("path").remove();
   const data = getFiltered();
   if (data.length === 0) {
     pointsG.selectAll("circle").remove();
@@ -958,9 +953,10 @@ function render(resetZoom) {
 }
 
 function renderMaintainers(iw, ih) {
+  pointsG.selectAll("circle").remove();
+  pointsG.selectAll("path").remove();
   const data = getFiltered();
   if (data.length === 0) {
-    pointsG.selectAll("circle").remove();
     xAxisG.selectAll("*").remove();
     yAxisG.selectAll("*").remove();
     gridX.selectAll("*").remove();
@@ -1020,10 +1016,18 @@ function renderMaintainers(iw, ih) {
     return "#58a6ff";
   };
 
-  const isTeam = d => d.maintainer.startsWith("Debian");
-
-  const symGen = d3.symbol().type(d => isTeam(d) ? d3.symbolTriangle : d3.symbolCircle);
+  const isTeamFn = d => /^Debian|Team$/.test(d.maintainer);
   const symScale = d3.scaleSqrt().domain([0, maxBugs]).range([4 * dotSizeMultiplier, 16 * dotSizeMultiplier]);
+
+  const symCircle = d3.symbol().type(d3.symbolCircle);
+  const symTriangle = d3.symbol().type(d3.symbolTriangle);
+
+  function maintPath(d) {
+    const size = Math.PI * Math.pow(symScale(d.total_bugs), 2);
+    const gen = isTeamFn(d) ? symTriangle : symCircle;
+    gen.size(size);
+    return gen();
+  }
 
   const paths = pointsG.selectAll("path").data(data, d => d.maintainer);
 
@@ -1031,7 +1035,7 @@ function renderMaintainers(iw, ih) {
 
   paths.enter()
     .append("path")
-    .attr("d", d => { symGen.size(Math.PI * Math.pow(symScale(d.total_bugs), 2)); return symGen(); })
+    .attr("d", d => maintPath(d))
     .attr("transform", d => `translate(${xScale(d.package_count)},${yScale(d.avg_version_delta)})`)
     .attr("fill", color)
     .attr("fill-opacity", 0.7)
@@ -1049,7 +1053,7 @@ function renderMaintainers(iw, ih) {
       ev.stopPropagation();
     })
     .merge(paths)
-    .attr("d", d => { symGen.size(Math.PI * Math.pow(symScale(d.total_bugs), 2)); return symGen(); })
+    .attr("d", d => maintPath(d))
     .attr("transform", d => `translate(${xScale(d.package_count)},${yScale(d.avg_version_delta)})`)
     .attr("fill", color)
     .attr("stroke", color);
@@ -1089,7 +1093,7 @@ function showTooltip(ev, d) {
 }
 
 function showMaintainerTooltip(ev, d) {
-  const isTeam = d.maintainer.startsWith("Debian");
+  const isTeam = /^Debian|Team$/.test(d.maintainer);
   const pkgList = d.packages.slice(0, 20).join(", ") + (d.packages.length > 20 ? ` +${d.packages.length - 20} more` : "");
   const lines = [
     `<button class="tooltip-close" onclick="hideTooltip()">&times;</button>`,
@@ -1128,7 +1132,6 @@ document.getElementById("y-axis-select").addEventListener("change", function () 
   location.hash = yField;
   const isMaintainer = yField === "maintainer_burden";
   document.getElementById("hide-no-bugs").closest("label").style.display = isMaintainer ? "none" : "";
-  document.querySelector(".slider-group").style.display = isMaintainer ? "none" : "";
   if (isMaintainer) {
     document.querySelector(".legend-title").textContent = "Maintainer Quadrants";
     document.querySelectorAll(".legend-item")[0].innerHTML = '<span class="legend-dot" style="background:#f85149"></span> Overburdened';
@@ -1150,19 +1153,10 @@ document.getElementById("hide-no-bugs").addEventListener("change", function () {
   render();
 });
 
-document.getElementById("min-vote").addEventListener("input", function () {
-  minVote = +this.value;
-  document.getElementById("min-vote-val").textContent = minVote;
-  render();
-});
-
 document.getElementById("dot-size").addEventListener("input", function () {
   dotSizeMultiplier = +this.value;
   document.getElementById("dot-size-val").textContent = dotSizeMultiplier.toFixed(1) + "x";
-  const data = getFiltered();
-  const maxBugs = d3.max(data, d => d.rc_bug_count) || 1;
-  rScale.domain([0, maxBugs]).range([1.5 * dotSizeMultiplier, 8 * dotSizeMultiplier]);
-  pointsG.selectAll("circle").attr("r", d => rScale(d.rc_bug_count));
+  render(false);
 });
 
 document.getElementById("search").addEventListener("input", function () {
