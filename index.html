@@ -372,6 +372,11 @@ footer a:hover {
         <input type="range" id="dot-size" min="0.5" max="5" value="0.8" step="0.1">
         <span id="dot-size-val">0.8x</span>
       </label>
+      <label id="min-vote-label">
+        Min installs
+        <input type="range" id="min-vote" min="0" max="100" value="0" step="1">
+        <span id="min-vote-val">0</span>
+      </label>
     </div>
     <label id="y-axis-label">
       Y-axis
@@ -413,6 +418,7 @@ let allData = [];
 let allMaintainers = [];
 let yField = "days_since_upload";
 let hideNoBugs = true;
+let minVote = 0;
 let selectedRegion = null;
 let selectedCircle = null;
 const visitedCircles = new Set();
@@ -551,7 +557,7 @@ svg.call(zoom);
 
 document.addEventListener("pointerdown", function (ev) {
   if (!tooltip.classList.contains("show")) return;
-  if (ev.target.closest(".tooltip") || ev.target.closest("circle")) return;
+  if (ev.target.closest(".tooltip") || ev.target.closest("circle") || ev.target.closest("path")) return;
   hideTooltip();
 });
     svg.style("cursor", null);
@@ -659,6 +665,7 @@ function getFiltered() {
     if (d.insts <= 0) return false;
     if (searchQuery && matchesSearch(d)) return true;
     if (hideNoBugs && d.rc_bug_count === 0) return false;
+    if (d.insts < minVote) return false;
     return true;
   });
 }
@@ -1078,14 +1085,18 @@ function showMaintainerTooltip(ev, d) {
 }
 
 function moveTooltip(ev) {
-  let x = ev.pageX + 14;
-  let y = ev.pageY - 10;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const tw = tooltip.offsetWidth;
   const th = tooltip.offsetHeight;
-  if (x + tw > window.innerWidth - 10) x = ev.pageX - tw - 14;
-  if (y + th > window.innerHeight - 10) y = ev.pageY - th - 10;
-  tooltip.style.left = x + "px";
-  tooltip.style.top = y + "px";
+  let x = ev.clientX + 14;
+  let y = ev.clientY - 10;
+  if (x + tw > vw - 8) x = vw - tw - 8;
+  if (x < 8) x = 8;
+  if (y + th > vh - 8) y = vh - th - 8;
+  if (y < 8) y = 8;
+  tooltip.style.left = x + window.scrollX + "px";
+  tooltip.style.top = y + window.scrollY + "px";
 }
 
 function hideTooltip() {
@@ -1098,6 +1109,7 @@ document.getElementById("y-axis-select").addEventListener("change", function () 
   location.hash = yField;
   const isMaintainer = yField === "maintainer_burden";
   document.getElementById("hide-no-bugs").closest("label").style.display = isMaintainer ? "none" : "";
+  document.getElementById("min-vote-label").style.display = isMaintainer ? "none" : "";
   if (isMaintainer) {
     document.querySelector(".legend-title").textContent = "Maintainer Quadrants";
     document.querySelectorAll(".legend-item")[0].innerHTML = '<span class="legend-dot" style="background:#f85149"></span> Overburdened';
@@ -1123,6 +1135,13 @@ document.getElementById("dot-size").addEventListener("input", function () {
   dotSizeMultiplier = +this.value;
   document.getElementById("dot-size-val").textContent = dotSizeMultiplier.toFixed(1) + "x";
   render(false);
+});
+
+document.getElementById("min-vote").addEventListener("input", function () {
+  const v = +this.value;
+  minVote = v === 0 ? 0 : Math.round(Math.pow(10, v / 16.67));
+  document.getElementById("min-vote-val").textContent = minVote.toLocaleString();
+  render();
 });
 
 document.getElementById("search").addEventListener("input", function () {
@@ -1190,8 +1209,9 @@ fetch(DATA_URL).then(resp => {
   loadingEl.style.display = "flex";
   loadingEl.style.color = "#3fb950";
   setTimeout(() => { loadingEl.style.display = "none"; }, 2000);
-  render();
-}).catch(() => {
+  try { render(); } catch(e) { console.error("render error:", e); }
+}).catch((e) => {
+  console.error("load error:", e);
   loadingEl.style.display = "none";
   document.getElementById("no-data").style.display = "flex";
 });
