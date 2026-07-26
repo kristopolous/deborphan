@@ -124,7 +124,6 @@ def build():
     maintainers.sort(key=lambda m: m["package_count"], reverse=True)
 
     output = {
-        "fetched_at": raw.get("fetched_at", datetime.now(timezone.utc).isoformat()),
         "package_count": len(packages),
         "packages": packages,
         "maintainers": maintainers,

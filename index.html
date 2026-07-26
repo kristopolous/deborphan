@@ -358,23 +358,7 @@ footer a:hover {
   <div class="guide-wrap">
     <button class="guide-btn" id="guide-btn">Guide</button>
     <div class="guide-popover" id="guide-popover">
-      <h3>What is this?</h3>
-      <p>An interactive map of every Debian source package. Each dot is one package, positioned by how widely installed it is (x-axis, install count from low on the left to high on the right) and how stale it is (y-axis, days since last upload or oldest open RC bug, with older/staler at the top). Dot size indicates number of open RC bugs: bigger dot = more bugs.</p>
-      <h3>What are the quadrants?</h3>
-      <p>The dashed lines split the plot at the median, creating four zones: <b>Widely installed &amp; Neglected</b> (high installs, long neglect) are the most urgent; <b>Widely installed &amp; Active</b> are well-maintained; <b>Niche &amp; Neglected</b> are low-install and stale; <b>Niche &amp; Active</b> are small but cared for.</p>
-      <h3>How to use it</h3>
-      <ul>
-        <li><b>Hover</b> any dot for details (votes, installs, bugs, maintainer, VCS status).</li>
-        <li><b>Click</b> a dot to open its tracker.debian.org page.</li>
-        <li><b>Scroll</b> to zoom, <b>drag</b> to pan. The axes extend beyond the data.</li>
-        <li><b>Shift+drag</b> to brush-select a region. The sidebar lists only those packages.</li>
-        <li><b>Search</b> by package name. Accepts regex: <code>^alsa$</code> for exact, <code>alac|7zip</code> for multiple.</li>
-        <li><b>Y-axis</b> switches between days since upload, oldest RC bug age, version delta, or <b>Maintainer Burden</b> (teams vs individuals).</li>
-        <li>In Maintainer Burden view, <b>triangles</b> are Debian teams, <b>circles</b> are individual maintainers.</li>
-        <li><b>X-axis</b> shows install count (popcon). Dot size shows open RC bugs.</li>
-        <li><b>Min installs</b> slider filters out low-install packages.</li>
-        <li><b>Dot size</b> slider scales circles by number of open RC bugs.</li>
-      </ul>
+      <div id="guide-content"></div>
     </div>
   </div>
   <div class="controls">
@@ -1148,8 +1132,42 @@ document.getElementById("search").addEventListener("input", function () {
 
 window.addEventListener("resize", render);
 
+function updateGuide() {
+  const el = document.getElementById("guide-content");
+  const pkgCount = allData.length;
+  const maintCount = allMaintainers.length;
+  const behindCount = allData.filter(d => d.behind_upstream).length;
+
+  if (yField === "maintainer_burden") {
+    el.innerHTML = `
+      <h3>Maintainer Burden</h3>
+      <p><b>X-axis:</b> number of source packages maintained (log).</p>
+      <p><b>Y-axis:</b> average version delta across packages that have comparison data (log). Version delta is computed as <code>(other_major - deb_major)*100 + (other_minor - deb_minor)*10 + (other_patch - deb_patch)</code> across Arch, FreeBSD, Homebrew, pkgsrc, and Repology. Date-based versions (major > 1900) are excluded.</p>
+      <p><b>Shape:</b> <b>&#x25B3;</b> = Debian team (&ldquo;Debian&hellip;&rdquo; or ending in &ldquo;Team&rdquo;), <b>&#x25CF;</b> = individual.</p>
+      <p><b>Size:</b> total open RC bugs across all packages.</p>
+      <p><b>Quadrants:</b> split at the median. Overburdened = many packages + far behind upstream.</p>
+      <p><b>${maintCount.toLocaleString()}</b> maintainers with 2+ packages (${behindCount.toLocaleString()} packages behind upstream).</p>
+    `;
+  } else {
+    const yLabel = yField === "days_since_upload"
+      ? "days since last upload"
+      : yField === "version_delta"
+      ? "average version delta vs upstream (best of Arch, FreeBSD, Homebrew, pkgsrc, Repology)"
+      : "age of oldest open RC bug";
+    el.innerHTML = `
+      <h3>Packages</h3>
+      <p><b>X-axis:</b> popcon install count (log).</p>
+      <p><b>Y-axis:</b> ${yLabel} (log).</p>
+      <p><b>Size:</b> number of open RC bugs.</p>
+      <p><b>Quadrants:</b> split at the median. Neglected = widely installed + stale.</p>
+      <p><b>${pkgCount.toLocaleString()}</b> source packages, <b>${behindCount.toLocaleString()}</b> behind upstream.</p>
+    `;
+  }
+}
+
 document.getElementById("guide-btn").addEventListener("click", function (e) {
   e.stopPropagation();
+  updateGuide();
   document.getElementById("guide-popover").classList.toggle("open");
 });
 document.addEventListener("click", function () {
