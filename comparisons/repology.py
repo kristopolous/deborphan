@@ -228,11 +228,10 @@ class RepologySource(ComparisonSource):
         else:
             reject_reason = f"Dist={best_dist}, no homepage to cross-check"
 
+        tag = "Accepted" if accepted else "Rejected"
+        print(f"    {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
         if not accepted and reject_reason:
-            print(f"      REJECT reason: {reject_reason}")
-
-        tag = "ACCEPTED" if accepted else "REJECTED"
-        print(f"    FUZZY {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
+            print(f"      Reason: {reject_reason}")
         print(f"      Normalized: '{name_norm}' vs '{best_name_norm}'")
         print(f"      Debian summary: {description or '(none)'}")
         print(f"      Repology summary: {summary or '(none)'}")
@@ -241,6 +240,7 @@ class RepologySource(ComparisonSource):
         if len(candidates) > 1:
             others = ", ".join(f"'{c[1]}' (d={c[0]})" for c in candidates[:3])
             print(f"      Other candidates: {others}")
+        print()
 
         if not accepted:
             return None, None
