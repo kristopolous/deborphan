@@ -68,7 +68,7 @@ The pipeline compares Debian versions against multiple external sources to find 
 
 Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume. Packages not found on Repology (404) or with only `rolling`-status versions (immutable snapshots, not tracked versions) are cached as `null` to avoid re-querying them on subsequent runs.
 
-`--check-none` enables fuzzy matching for packages that returned None. It strips Repology prefixes (`r:`, `python:`, `ruby:`, etc.) and trailing version numbers, then Levenshtein-ranks candidates. Matches with distance ≤ 2 are auto-accepted; dist > 2 are rejected. Each match prints ACCEPTED/REJECTED with normalized names and Repology summary for manual review.
+`--check-none` enables fuzzy matching for packages that returned None. It strips Repology prefixes (`r:`, `python:`, `ruby:`, etc.) and trailing version numbers, then Levenshtein-ranks candidates. dist ≤ 1 auto-accepts; dist > 1 requires homepage cross-check (fetches Repology project page, compares against Debian homepage from UDD). Each match prints ACCEPTED/REJECTED with normalized names, Debian homepage, and Repology summary for manual review.
 
 ```bash
 .venv/bin/python run.py fetch --sources arch   # Arch only

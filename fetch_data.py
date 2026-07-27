@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Fetch Debian package neglect data from UDD and write to static JSON."""
+"""Fetch Debian package neglect data from UDD and write to static JSON.
+
+Provenance:
+  - UDD: udd-mirror.debian.net (public read-only PostgreSQL mirror)
+  - Descriptions: deb.debian.org/debian/dists/sid/{main,contrib,non-free,non-free-firmware}/source/Sources.xz
+  - All sources are official, public, and reproducible.
+"""
 
 import csv
 import io
@@ -8,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from datetime import datetime, timezone
 
 UDD_HOST = "udd-mirror.debian.net"
@@ -15,6 +22,9 @@ UDD_PORT = 5432
 UDD_DB = "udd"
 UDD_USER = "udd-mirror"
 UDD_PASS = "udd-mirror"
+
+SOURCES_BASE_URL = "http://deb.debian.org/debian/dists/sid"
+SOURCES_COMPONENTS = ["main", "contrib", "non-free", "non-free-firmware"]
 
 SQL = r"""
 COPY (
@@ -140,14 +150,79 @@ def fetch():
     return rows
 
 
+def fetch_descriptions():
+    """Fetch package descriptions from Debian Sources.xz files.
+
+    Downloads one Sources.xz per component from the official Debian mirror,
+    parses Description fields, and returns a dict of {source_name: description}.
+
+    The short description (first line after Description:) is used.
+    Long descriptions (indented continuation lines) are excluded.
+    """
+    descriptions = {}
+
+    for component in SOURCES_COMPONENTS:
+        url = f"{SOURCES_BASE_URL}/{component}/source/Sources.xz"
+        print(f"  Downloading {url}...", file=sys.stderr)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                compressed = resp.read()
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+            print(f"  Warning: failed to download {url}: {e}", file=sys.stderr)
+            continue
+
+        # Decompress and parse
+        import lzma
+        try:
+            text = lzma.decompress(compressed).decode("utf-8", errors="replace")
+        except lzma.LZMAError as e:
+            print(f"  Warning: failed to decompress {url}: {e}", file=sys.stderr)
+            continue
+
+        # Parse Description fields from Sources format
+        # Description: short description text
+        #  continuation lines start with space or tab
+        current_source = None
+        in_description = False
+        for line in text.split("\n"):
+            if line.startswith("Package: "):
+                current_source = line[len("Package: "):].strip()
+                in_description = False
+            elif line.startswith("Description: ") and current_source:
+                # Short description is the text after "Description: "
+                desc = line[len("Description: "):].strip()
+                descriptions[current_source] = desc
+                in_description = True
+            elif in_description and (line.startswith(" ") or line.startswith("\t")):
+                # Continuation line — skip (we only want short description)
+                continue
+            else:
+                in_description = False
+
+        print(f"  Parsed {component}: {sum(1 for s in descriptions if True)} total descriptions so far", file=sys.stderr)
+
+    return descriptions
+
+
 def main():
     print(f"Querying UDD at {UDD_HOST}...", file=sys.stderr)
     rows = fetch()
     print(f"Fetched {len(rows)} packages.", file=sys.stderr)
 
+    print("Fetching Debian descriptions from Sources.xz...", file=sys.stderr)
+    descriptions = fetch_descriptions()
+    print(f"Got {len(descriptions)} descriptions.", file=sys.stderr)
+
+    # Merge descriptions into rows
+    for row in rows:
+        row["description"] = descriptions.get(row["source"])
+
     output = {
         "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "sources_mirror": SOURCES_BASE_URL,
         "package_count": len(rows),
+        "description_count": len(descriptions),
         "packages": rows,
     }
 

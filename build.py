@@ -64,6 +64,7 @@ def build():
             "oldest_rc_bug_age": pkg.get("oldest_rc_bug_age"),
             "maintainer": pkg.get("maintainer"),
             "homepage": pkg.get("homepage"),
+            "description": pkg.get("description"),
             "vcs_status": pkg.get("vcs_status"),
             "vcs_url": pkg.get("vcs_url"),
         }

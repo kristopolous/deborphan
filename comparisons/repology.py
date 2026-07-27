@@ -18,6 +18,8 @@ import time
 import urllib.request
 from urllib.parse import quote
 
+INFO_URL = "https://repology.org/project/{name}/information"
+
 from comparisons import ComparisonSource
 
 API_URL = "https://repology.org/api/v1/project/{name}"
@@ -87,6 +89,32 @@ def _strip_homepage(url):
     return u
 
 
+def _fetch_repology_homepages(project_name):
+    """Fetch homepage URLs from Repology project information page.
+
+    Returns a set of stripped homepage strings, or empty set on error.
+    """
+    url = INFO_URL.format(name=quote(project_name))
+    req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return set()
+
+    # Extract URLs from the "Homepage links" section
+    # The HTML has patterns like: <a href="https://www.7-zip.org/">ok, no IPv6 (20)</a>
+    homepages = set()
+    for match in re.finditer(r'href="(https?://[^"]+)"', html):
+        href = match.group(1)
+        # Skip repology.org, github.com/*/blob/*, sourceforge.net/*/files/*, etc.
+        if "repology.org" in href:
+            continue
+        homepages.add(_strip_homepage(href))
+
+    return homepages
+
+
 class RepologySource(ComparisonSource):
     name = "Repology"
     slug = "repology"
@@ -117,11 +145,12 @@ class RepologySource(ComparisonSource):
 
         return self._pick_best_version(data)
 
-    def _search_fuzzy(self, name, homepage=None):
+    def _search_fuzzy(self, name, homepage=None, description=None):
         """Search Repology for fuzzy name matches, cross-check with summary.
 
         Returns (version, project_name) or (None, None).
-        Prints match details for manual review.
+        Prints both Debian and Repology summaries for comparison.
+        Rejects if either summary is missing.
         """
         url = SEARCH_URL.format(name=quote(name))
         req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
@@ -166,17 +195,50 @@ class RepologySource(ComparisonSource):
 
         # Acceptance logic:
         # - normalized names match exactly: auto-accept
-        # - dist <= 2: auto-accept
-        # - dist > 2: reject
-        if best_dist == 0 or best_dist <= 2:
+        # - dist == 1 AND one is prefix of the other: auto-accept
+        #   (e.g. lme -> lme4, c-lolcat -> lolcat)
+        # - dist > 1: require homepage cross-check AND both summaries
+        # - everything else: reject
+        best_name_norm = _normalize_repology_name(best_name)
+        is_prefix = best_name_norm.startswith(name_norm) or name_norm.startswith(best_name_norm)
+        if name_norm == best_name_norm:
             accepted = True
+        elif best_dist == 1 and is_prefix:
+            accepted = True
+        elif best_dist > 1 and homepage:
+            # Fetch Repology project homepages and compare
+            rep_homepages = _fetch_repology_homepages(best_name)
+            hp = _strip_homepage(homepage)
+            if hp and rep_homepages:
+                # Accept only if homepages overlap
+                accepted = hp in rep_homepages
+                if not accepted:
+                    print(f"      Homepage mismatch: Debian '{hp}' not in Repology {rep_homepages}")
+            else:
+                # Can't cross-check — reject
+                accepted = False
+                if not rep_homepages:
+                    print(f"      No Repology homepages found for '{best_name}'")
         else:
+            # No Debian homepage — can't cross-check — reject
             accepted = False
+
+        # Require both summaries for dist > 1 (cross-check validation)
+        if accepted and best_dist > 1:
+            if not description or not summary:
+                accepted = False
+                if not description:
+                    print(f"      No Debian description for '{name}'")
+                if not summary:
+                    print(f"      No Repology summary for '{best_name}'")
 
         tag = "ACCEPTED" if accepted else "REJECTED"
         print(f"    FUZZY {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
-        print(f"      Normalized: '{name_norm}' vs '{_normalize_repology_name(best_name)}'")
-        print(f"      Repology summary: {summary}")
+        print(f"      Normalized: '{name_norm}' vs '{best_name_norm}'")
+        print(f"      Debian summary: {description or '(none)'}")
+        print(f"      Repology summary: {summary or '(none)'}")
+        if homepage:
+            print(f"      Debian homepage: {_strip_homepage(homepage)}")
         if len(candidates) > 1:
             others = ", ".join(f"'{c[1]}' (d={c[0]})" for c in candidates[:3])
             print(f"      Other candidates: {others}")
@@ -223,8 +285,9 @@ class RepologySource(ComparisonSource):
         cache = self.load_cache(cache_dir) if resume else {}
         already_cached = set(cache.keys())
 
-        # Build homepage lookup
+        # Build homepage and description lookups
         homepages = {p["source"]: p.get("homepage") for p in packages_raw}
+        descriptions = {p["source"]: p.get("description") for p in packages_raw}
 
         # Sort by installs descending (most popular first)
         sorted_pkgs = sorted(packages_raw, key=lambda p: -(p.get("insts") or 0))
@@ -252,6 +315,7 @@ class RepologySource(ComparisonSource):
         for i, pkg in enumerate(to_query):
             name = pkg["source"]
             homepage = homepages.get(name)
+            description = descriptions.get(name)
 
             # Try exact name first
             version = self._query_project(name)
@@ -259,7 +323,7 @@ class RepologySource(ComparisonSource):
 
             # Fuzzy fallback only if --check-none
             if not version and check_none:
-                version, matched_name = self._search_fuzzy(name, homepage)
+                version, matched_name = self._search_fuzzy(name, homepage, description)
                 if version:
                     fuzzy += 1
 

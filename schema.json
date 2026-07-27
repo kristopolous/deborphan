@@ -64,6 +64,10 @@
             "type": ["string", "null"],
             "description": "Package homepage URL from UDD."
           },
+          "description": {
+            "type": ["string", "null"],
+            "description": "Short package description from Debian Sources.xz. Used for fuzzy match cross-checking."
+          },
           "vcs_status": {
             "type": ["string", "null"],
             "description": "vcswatch status (NEW, COMMITS, etc.). Null if not tracked."
