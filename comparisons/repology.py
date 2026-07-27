@@ -198,40 +198,40 @@ class RepologySource(ComparisonSource):
         # Acceptance logic: DEFAULT REJECT. Only accept when ALL conditions met.
         best_name_norm = _normalize_repology_name(best_name)
         accepted = False
-        reject_reason = None
+        reason = None
 
         # Check: both summaries must be non-null and non-empty
         has_debian_desc = bool(description and description.strip())
         has_repology_summary = bool(summary and summary.strip())
 
         if not has_debian_desc:
-            reject_reason = f"No Debian description for '{name}'"
+            reason = f"No Debian description for '{name}'"
         elif not has_repology_summary:
-            reject_reason = f"No Repology summary for '{best_name}'"
+            reason = f"No Repology summary for '{best_name}'"
         elif name_norm == best_name_norm:
-            # Exact normalized match with both summaries — accept
             accepted = True
+            reason = "Exact normalized name match"
         elif best_dist == 1:
-            # Close match with both summaries — accept
             accepted = True
+            reason = f"Close name match (dist={best_dist})"
         elif best_dist > 1 and homepage:
-            # Distant match — require homepage cross-check
             rep_homepages = _fetch_repology_homepages(best_name)
             hp = _strip_homepage(homepage)
             if hp and rep_homepages:
                 if hp in rep_homepages:
                     accepted = True
+                    reason = f"Homepage cross-check passed"
                 else:
-                    reject_reason = f"Homepage mismatch: Debian '{hp}' not in Repology {rep_homepages}"
+                    reason = f"Homepage mismatch: Debian '{hp}' not in Repology {rep_homepages}"
             else:
-                reject_reason = f"No Repology homepages found for '{best_name}'"
+                reason = f"No Repology homepages found for '{best_name}'"
         else:
-            reject_reason = f"Dist={best_dist}, no homepage to cross-check"
+            reason = f"Dist={best_dist}, no homepage to cross-check"
 
         tag = "Accepted" if accepted else "Rejected"
         print(f"    {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
-        if not accepted and reject_reason:
-            print(f"      Reason: {reject_reason}")
+        if reason:
+            print(f"      Reason: {reason}")
         print(f"      Normalized: '{name_norm}' vs '{best_name_norm}'")
         print(f"      Debian summary: {description or '(none)'}")
         print(f"      Repology summary: {summary or '(none)'}")
