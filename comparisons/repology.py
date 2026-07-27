@@ -15,10 +15,12 @@ import json
 import sys
 import time
 import urllib.request
+from urllib.parse import quote
 
 from comparisons import ComparisonSource
 
 API_URL = "https://repology.org/api/v1/project/{name}"
+SEARCH_URL = "https://repology.org/api/v1/projects/?search={name}"
 
 # Repos that track upstream closely (rolling release or very fast updates)
 FAST_REPOS = {
@@ -39,6 +41,35 @@ FAST_REPOS = {
 }
 
 
+def _levenshtein(s1, s2):
+    """Levenshtein distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (c1 != c2)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def _strip_homepage(url):
+    """Normalize a homepage URL for comparison: strip protocol, www., trailing slash."""
+    if not url:
+        return ""
+    u = url.lower().strip()
+    u = u.replace("https://", "").replace("http://", "")
+    u = u.replace("www.", "")
+    u = u.rstrip("/")
+    return u
+
+
 class RepologySource(ComparisonSource):
     name = "Repology"
     slug = "repology"
@@ -55,14 +86,9 @@ class RepologySource(ComparisonSource):
             return {}
 
     def _query_project(self, name):
-        """Query Repology for a single project.
+        """Query Repology for a single project by exact name.
 
-        Returns the best version string from fast repos, or None if:
-        - Package not found on Repology (404)
-        - All matching versions have status "rolling" (immutable snapshots, not tracked)
-        - Network error / timeout
-
-        None results are cached to avoid re-querying on resume.
+        Returns the best version string from fast repos, or None.
         """
         url = API_URL.format(name=name)
         req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
@@ -72,9 +98,65 @@ class RepologySource(ComparisonSource):
         except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
             return None
 
-        best_version = None
-        best_status = None
-        for entry in data:
+        return self._pick_best_version(data)
+
+    def _search_fuzzy(self, name, homepage=None):
+        """Search Repology for fuzzy name matches, cross-check with homepage.
+
+        Returns (version, project_name) or (None, None).
+        Prints match details for manual review.
+        """
+        url = SEARCH_URL.format(name=quote(name))
+        req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read())
+        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+            return None, None
+
+        # data is {project_name: [packages...]}
+        candidates = []
+        for project_name, packages in data.items():
+            version = self._pick_best_version(packages)
+            if not version:
+                continue
+            dist = _levenshtein(name.lower(), project_name.lower())
+            candidates.append((dist, project_name, version))
+
+        if not candidates:
+            return None, None
+
+        # Sort by Levenshtein distance
+        candidates.sort(key=lambda c: c[0])
+
+        # Take top 3 for review
+        best_dist, best_name, best_version = candidates[0]
+
+        # If distance > 3, too fuzzy — skip
+        if best_dist > 3:
+            return None, None
+
+        # Homepage cross-check: get the summary from the best match
+        summary = ""
+        for entry in data.get(best_name, []):
+            if entry.get("version") == best_version:
+                summary = entry.get("summary", "")
+                break
+
+        # Print for manual review
+        hb = _strip_homepage(homepage) if homepage else "(none)"
+        print(f"    FUZZY: '{name}' -> '{best_name}' (dist={best_dist})")
+        print(f"      Debian homepage: {hb}")
+        print(f"      Repology summary: {summary}")
+        if len(candidates) > 1:
+            others = ", ".join(f"'{c[1]}' (d={c[0]})" for c in candidates[:3])
+            print(f"      Other candidates: {others}")
+
+        return best_version, best_name
+
+    def _pick_best_version(self, packages):
+        """Pick the best version from a list of Repology package entries."""
+        for entry in packages:
             repo = entry.get("repo", "")
             if repo not in FAST_REPOS:
                 continue
@@ -83,12 +165,19 @@ class RepologySource(ComparisonSource):
             if not version or status == "rolling":
                 continue
             if status == "newest":
-                return version  # Found newest, no need to keep looking
-            if status == "outdated" and best_version is None:
-                best_version = version
-                best_status = status
-
-        return best_version
+                return version
+        # No newest found, try outdated
+        for entry in packages:
+            repo = entry.get("repo", "")
+            if repo not in FAST_REPOS:
+                continue
+            status = entry.get("status", "")
+            version = entry.get("version", "")
+            if not version or status == "rolling":
+                continue
+            if status == "outdated":
+                return version
+        return None
 
     def fetch_incremental(self, packages_raw, cache_dir="data", limit=None, resume=True):
         """Query Repology for packages not yet cached, sorted by popularity.
@@ -101,6 +190,9 @@ class RepologySource(ComparisonSource):
         """
         cache = self.load_cache(cache_dir) if resume else {}
         already_cached = set(cache.keys())
+
+        # Build homepage lookup
+        homepages = {p["source"]: p.get("homepage") for p in packages_raw}
 
         # Sort by installs descending (most popular first)
         sorted_pkgs = sorted(packages_raw, key=lambda p: -(p.get("insts") or 0))
@@ -116,28 +208,41 @@ class RepologySource(ComparisonSource):
 
         queried = 0
         found = 0
+        fuzzy = 0
         errors = 0
 
         for i, pkg in enumerate(to_query):
             name = pkg["source"]
+            homepage = homepages.get(name)
+
+            # Try exact name first
             version = self._query_project(name)
+            matched_name = name if version else None
+
+            # Fuzzy fallback
+            if not version:
+                version, matched_name = self._search_fuzzy(name, homepage)
+                if version:
+                    fuzzy += 1
+
             queried += 1
 
-            cache[name] = version  # cache None too (negative cache)
+            # Cache result (version or None)
+            cache[name] = {"version": version, "matched": matched_name} if version else None
             if version:
                 found += 1
 
             if (i + 1) % 50 == 0:
                 # Save incrementally every 50 queries
                 self._save_cache(cache, cache_dir)
-                print(f"    {i + 1}/{len(to_query)} queried, {found} found, {errors} errors", flush=True)
+                print(f"    {i + 1}/{len(to_query)} queried, {found} found, {fuzzy} fuzzy, {errors} errors", flush=True)
 
-            # Rate limit: ~2 req/sec
-            time.sleep(0.5)
+            # Rate limit: ~1 req/sec (search endpoint is heavier)
+            time.sleep(1.0)
 
         # Final save
         self._save_cache(cache, cache_dir)
-        print(f"  Done: {queried} queried, {found} found, {len(cache)} total cached", flush=True)
+        print(f"  Done: {queried} queried, {found} found, {fuzzy} fuzzy, {len(cache)} total cached", flush=True)
 
         return cache
 
@@ -155,6 +260,44 @@ class RepologySource(ComparisonSource):
             debian_source_name.replace("-", ""),
             debian_source_name.replace("-", "_"),
         ]
+
+    def compare(self, debian_source_name, debian_version, packages_dict):
+        """Override to handle both old (string) and new (dict) cache formats."""
+        from comparisons import parse_debian_upstream, compute_version_delta
+        upstream = parse_debian_upstream(debian_version)
+        if not upstream:
+            return None
+
+        entry = packages_dict.get(debian_source_name)
+        if not entry:
+            # Try normalized names
+            for candidate in self.match_candidates(debian_source_name):
+                entry = packages_dict.get(candidate)
+                if entry:
+                    break
+
+        if not entry:
+            return None
+
+        # Handle old format (string) and new format (dict)
+        if isinstance(entry, str):
+            other_version = entry
+            matched_name = debian_source_name
+        else:
+            other_version = entry.get("version")
+            matched_name = entry.get("matched", debian_source_name)
+
+        if not other_version:
+            return None
+
+        delta = compute_version_delta(upstream, other_version)
+        return {
+            f"{self.slug}_version": other_version,
+            f"{self.slug}_upstream_version": self.parse_upstream(other_version),
+            f"{self.slug}_matched": matched_name,
+            "behind_upstream": delta is not None,
+            "version_delta": delta,
+        }
 
     def parse_upstream(self, version_str):
         return version_str

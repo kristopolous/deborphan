@@ -60,6 +60,10 @@
             "type": ["string", "null"],
             "description": "Maintainer name and email."
           },
+          "homepage": {
+            "type": ["string", "null"],
+            "description": "Package homepage URL from UDD."
+          },
           "vcs_status": {
             "type": ["string", "null"],
             "description": "vcswatch status (NEW, COMMITS, etc.). Null if not tracked."
@@ -103,6 +107,14 @@
           "repology_version": {
             "type": ["string", "null"],
             "description": "Best upstream version from Repology fast repos (nix, Void, Arch, Fedora rawhide, etc.). Null if not found."
+          },
+          "repology_upstream_version": {
+            "type": ["string", "null"],
+            "description": "Normalized upstream portion of the Repology version. Null if not found."
+          },
+          "repology_matched": {
+            "type": ["string", "null"],
+            "description": "Repology project name that was matched (may differ from Debian source name if fuzzy match was used). Null if exact match."
           },
           "behind_upstream": {
             "type": "boolean",

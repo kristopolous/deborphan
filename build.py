@@ -63,6 +63,7 @@ def build():
             "rc_bug_count": pkg.get("rc_bug_count", 0),
             "oldest_rc_bug_age": pkg.get("oldest_rc_bug_age"),
             "maintainer": pkg.get("maintainer"),
+            "homepage": pkg.get("homepage"),
             "vcs_status": pkg.get("vcs_status"),
             "vcs_url": pkg.get("vcs_url"),
         }
@@ -76,6 +77,8 @@ def build():
             if result:
                 entry[f"{slug}_version"] = result[f"{slug}_version"]
                 entry[f"{slug}_upstream_version"] = result[f"{slug}_upstream_version"]
+                if f"{slug}_matched" in result:
+                    entry[f"{slug}_matched"] = result[f"{slug}_matched"]
                 delta = result["version_delta"]
                 if delta is not None and (best_delta is None or delta > best_delta):
                     best_delta = delta
