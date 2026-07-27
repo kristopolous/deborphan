@@ -20,7 +20,7 @@ SQL = r"""
 COPY (
 WITH latest_sources AS (
     SELECT DISTINCT ON (source)
-        source, version, maintainer,
+        source, version, maintainer, homepage,
         (string_to_array(bin, ', '))[1] AS first_bin,
         bin
     FROM sources
@@ -65,6 +65,7 @@ SELECT
          ELSE NULL
     END AS oldest_rc_bug_age,
     ls.maintainer,
+    ls.homepage,
     v.status AS vcs_status,
     v.url AS vcs_url
 FROM latest_sources ls
@@ -131,6 +132,7 @@ def fetch():
             "rc_bug_count": parse_int(r["rc_bug_count"]),
             "oldest_rc_bug_age": parse_float(r["oldest_rc_bug_age"]),
             "maintainer": r["maintainer"] or None,
+            "homepage": r["homepage"] or None,
             "vcs_status": r["vcs_status"] or None,
             "vcs_url": r["vcs_url"] or None,
         })
