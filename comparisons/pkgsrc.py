@@ -4,7 +4,7 @@ import json
 import re
 import urllib.request
 
-from comparisons import ComparisonSource
+from comparisons import ComparisonSource, CACHE_DIR
 
 
 INDEX_URL = "https://ftp.NetBSD.org/pub/pkgsrc/current/pkgsrc/index-all.html"

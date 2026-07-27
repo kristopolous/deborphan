@@ -3,7 +3,10 @@
 import json
 import re
 from abc import ABC, abstractmethod
+from pathlib import Path
 from semver import Version
+
+CACHE_DIR = Path.home() / ".cache" / "orphan"
 
 
 def parse_debian_upstream(version_str):
@@ -101,7 +104,7 @@ class ComparisonSource(ABC):
         pass
 
     @abstractmethod
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
         """Fetch version data from the source.
 
         Returns a dict of {package_name: version_string}.

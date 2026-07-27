@@ -6,7 +6,7 @@ import re
 import tarfile
 import urllib.request
 
-from comparisons import ComparisonSource
+from comparisons import ComparisonSource, CACHE_DIR
 
 
 REPOS = [
@@ -45,13 +45,15 @@ class ArchSource(ComparisonSource):
     name = "Arch Linux"
     slug = "arch"
 
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         all_packages = {}
         for url in REPOS:
             repo_packages = fetch_repo(url)
             print(f"    {len(repo_packages)} packages", flush=True)
             all_packages.update(repo_packages)
 
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = f"{cache_dir}/arch_versions.json"
         with open(cache_path, "w") as f:
             json.dump({"arch_packages": all_packages}, f, separators=(",", ":"))
@@ -59,7 +61,8 @@ class ArchSource(ComparisonSource):
         print(f"  Total: {len(all_packages)} packages", flush=True)
         return all_packages
 
-    def load_cache(self, cache_dir="data"):
+    def load_cache(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         try:
             with open(f"{cache_dir}/arch_versions.json") as f:
                 return json.load(f).get("arch_packages", {})

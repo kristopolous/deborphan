@@ -4,7 +4,7 @@ import json
 import re
 import urllib.request
 
-from comparisons import ComparisonSource
+from comparisons import ComparisonSource, CACHE_DIR
 
 
 INDEX_URL = "https://download.FreeBSD.org/ports/index/INDEX-14"
@@ -14,7 +14,8 @@ class FreebsdSource(ComparisonSource):
     name = "FreeBSD Ports"
     slug = "freebsd"
 
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         print(f"  Fetching {INDEX_URL}...", flush=True)
         req = urllib.request.Request(INDEX_URL, headers={"User-Agent": "debian-neglect-explorer/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -41,6 +42,7 @@ class FreebsdSource(ComparisonSource):
                 version = re.sub(r",\d+$", "", version)
                 packages[name] = version
 
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = f"{cache_dir}/freebsd_versions.json"
         with open(cache_path, "w") as f:
             json.dump({"freebsd_packages": packages}, f, separators=(",", ":"))
@@ -48,7 +50,8 @@ class FreebsdSource(ComparisonSource):
         print(f"  Total: {len(packages)} packages", flush=True)
         return packages
 
-    def load_cache(self, cache_dir="data"):
+    def load_cache(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         try:
             with open(f"{cache_dir}/freebsd_versions.json") as f:
                 return json.load(f).get("freebsd_packages", {})

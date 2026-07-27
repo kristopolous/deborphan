@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 INFO_URL = "https://repology.org/project/{name}/information"
 
-from comparisons import ComparisonSource
+from comparisons import ComparisonSource, CACHE_DIR
 
 API_URL = "https://repology.org/api/v1/project/{name}"
 SEARCH_URL = "https://repology.org/api/v1/projects/?search={name}"

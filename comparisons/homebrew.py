@@ -4,7 +4,7 @@ import json
 import re
 import urllib.request
 
-from comparisons import ComparisonSource
+from comparisons import ComparisonSource, CACHE_DIR
 
 
 FORMULAE_URL = "https://formulae.brew.sh/api/formula.json"
@@ -14,7 +14,8 @@ class HomebrewSource(ComparisonSource):
     name = "Homebrew"
     slug = "homebrew"
 
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         print(f"  Fetching {FORMULAE_URL}...", flush=True)
         req = urllib.request.Request(FORMULAE_URL, headers={"User-Agent": "debian-neglect-explorer/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
