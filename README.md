@@ -39,6 +39,7 @@ python3 -m http.server 8080
 # Query Repology (re-entrant, sorted by popularity)
 .venv/bin/python run.py repology --limit 500
 .venv/bin/python run.py repology             # resume from last checkpoint
+.venv/bin/python run.py repology --check-none # try fuzzy matching for None entries
 
 # List available sources
 .venv/bin/python run.py list
@@ -70,6 +71,7 @@ Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads.
 ```bash
 .venv/bin/python run.py fetch --sources arch   # Arch only
 .venv/bin/python run.py repology --limit 500   # Repology top 500
+.venv/bin/python run.py repology --check-none # re-check None entries with fuzzy search
 .venv/bin/python run.py repology --no-resume   # wipe cache, start fresh
 ```
 

@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.request
@@ -59,6 +60,22 @@ def _levenshtein(s1, s2):
     return prev_row[-1]
 
 
+# Repology prefixes to strip before comparison
+REPOLOGY_PREFIXES = ("r:", "python:", "python3:", "ruby:", "perl:", "c:", "java:", "perl6:")
+
+
+def _normalize_repology_name(name):
+    """Strip Repology prefixes and trailing numbers for comparison."""
+    n = name.lower()
+    for prefix in REPOLOGY_PREFIXES:
+        if n.startswith(prefix):
+            n = n[len(prefix):]
+            break
+    # Strip trailing version-like numbers: vecmath1.2 -> vecmath
+    n = re.sub(r"\d+(\.\d+)*$", "", n)
+    return n
+
+
 def _strip_homepage(url):
     """Normalize a homepage URL for comparison: strip protocol, www., trailing slash."""
     if not url:
@@ -101,7 +118,7 @@ class RepologySource(ComparisonSource):
         return self._pick_best_version(data)
 
     def _search_fuzzy(self, name, homepage=None):
-        """Search Repology for fuzzy name matches, cross-check with homepage.
+        """Search Repology for fuzzy name matches, cross-check with summary.
 
         Returns (version, project_name) or (None, None).
         Prints match details for manual review.
@@ -114,44 +131,58 @@ class RepologySource(ComparisonSource):
         except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
             return None, None
 
+        name_norm = _normalize_repology_name(name)
+
         # data is {project_name: [packages...]}
         candidates = []
         for project_name, packages in data.items():
             version = self._pick_best_version(packages)
             if not version:
                 continue
-            dist = _levenshtein(name.lower(), project_name.lower())
+            proj_norm = _normalize_repology_name(project_name)
+
+            # If normalized names match exactly, auto-accept
+            if name_norm == proj_norm:
+                candidates.insert(0, (0, project_name, version))
+                continue
+
+            dist = _levenshtein(name_norm, proj_norm)
             candidates.append((dist, project_name, version))
 
         if not candidates:
             return None, None
 
-        # Sort by Levenshtein distance
+        # Sort by Levenshtein distance (exact normalized matches first)
         candidates.sort(key=lambda c: c[0])
 
-        # Take top 3 for review
         best_dist, best_name, best_version = candidates[0]
 
-        # If distance > 3, too fuzzy — skip
-        if best_dist > 3:
-            return None, None
-
-        # Homepage cross-check: get the summary from the best match
+        # Get summary from best match
         summary = ""
         for entry in data.get(best_name, []):
             if entry.get("version") == best_version:
                 summary = entry.get("summary", "")
                 break
 
-        # Print for manual review
-        hb = _strip_homepage(homepage) if homepage else "(none)"
-        print(f"    FUZZY: '{name}' -> '{best_name}' (dist={best_dist})")
-        print(f"      Debian homepage: {hb}")
+        # Acceptance logic:
+        # - normalized names match exactly: auto-accept
+        # - dist <= 2: auto-accept
+        # - dist > 2: reject
+        if best_dist == 0 or best_dist <= 2:
+            accepted = True
+        else:
+            accepted = False
+
+        tag = "ACCEPTED" if accepted else "REJECTED"
+        print(f"    FUZZY {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
+        print(f"      Normalized: '{name_norm}' vs '{_normalize_repology_name(best_name)}'")
         print(f"      Repology summary: {summary}")
         if len(candidates) > 1:
             others = ", ".join(f"'{c[1]}' (d={c[0]})" for c in candidates[:3])
             print(f"      Other candidates: {others}")
 
+        if not accepted:
+            return None, None
         return best_version, best_name
 
     def _pick_best_version(self, packages):
@@ -179,7 +210,7 @@ class RepologySource(ComparisonSource):
                 return version
         return None
 
-    def fetch_incremental(self, packages_raw, cache_dir="data", limit=None, resume=True):
+    def fetch_incremental(self, packages_raw, cache_dir="data", limit=None, resume=True, check_none=False):
         """Query Repology for packages not yet cached, sorted by popularity.
 
         Args:
@@ -187,6 +218,7 @@ class RepologySource(ComparisonSource):
             cache_dir: where to cache results
             limit: max number of packages to query this run (None = all)
             resume: if True, skip packages already in cache
+            check_none: if True, try fuzzy search for packages that returned None
         """
         cache = self.load_cache(cache_dir) if resume else {}
         already_cached = set(cache.keys())
@@ -199,6 +231,12 @@ class RepologySource(ComparisonSource):
 
         # Filter to unmatched only
         to_query = [p for p in sorted_pkgs if p["source"] not in already_cached]
+
+        # If check_none, also re-query None entries
+        if check_none:
+            none_entries = [p for p in sorted_pkgs if p["source"] in already_cached and cache.get(p["source"]) is None]
+            to_query = to_query + none_entries
+            print(f"  Re-checking {len(none_entries)} None entries with fuzzy search", flush=True)
 
         if limit:
             to_query = to_query[:limit]
@@ -219,8 +257,8 @@ class RepologySource(ComparisonSource):
             version = self._query_project(name)
             matched_name = name if version else None
 
-            # Fuzzy fallback
-            if not version:
+            # Fuzzy fallback only if --check-none
+            if not version and check_none:
                 version, matched_name = self._search_fuzzy(name, homepage)
                 if version:
                     fuzzy += 1
@@ -307,6 +345,7 @@ def main():
     parser = argparse.ArgumentParser(description="Query Repology for package versions (re-entrant)")
     parser.add_argument("--limit", type=int, default=None, help="Max packages to query this run")
     parser.add_argument("--no-resume", action="store_true", help="Clear cache and start fresh")
+    parser.add_argument("--check-none", action="store_true", help="Try fuzzy search for packages that returned None")
     parser.add_argument("--cache-dir", default="data", help="Cache directory")
     args = parser.parse_args()
 
@@ -319,6 +358,7 @@ def main():
         cache_dir=args.cache_dir,
         limit=args.limit,
         resume=not args.no_resume,
+        check_none=args.check_none,
     )
 
 
