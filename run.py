@@ -79,7 +79,7 @@ commands:
 
     elif sub.command == "repology":
         args = repology_parser.parse_args(sys.argv[2:])
-        cmd = f"{python} -m comparisons.repology --cache-dir {cache_dir}"
+        cmd = f"{python} -m comparisons.repology"
         if args.limit:
             cmd += f" --limit {args.limit}"
         if args.no_resume:
