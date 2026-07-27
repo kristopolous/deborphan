@@ -121,10 +121,10 @@ The comparison framework is extensible — see `comparisons/` directory to add n
 ```
 run.py                     CLI entry point (fetch, build, repology, serve, list, sample)
 index.html                 Single-page D3 scatter plot (HTML + CSS + JS)
-fetch_data.py              Queries UDD via psql -> data/packages_raw.json
-build.py                   Merges data -> data/packages.json
+fetch_data.py              Queries UDD via psql -> ~/.cache/orphan/packages_raw.json
+build.py                   Merges data -> ~/.cache/orphan/packages.json + data/packages.json
 comparisons/               Version comparison framework
-  __init__.py                Shared utilities + base class
+  __init__.py                Shared utilities + base class + CACHE_DIR
   arch.py                    Arch Linux source
   freebsd.py                 FreeBSD Ports source
   homebrew.py                Homebrew source
@@ -132,9 +132,15 @@ comparisons/               Version comparison framework
   repology.py                Repology (re-entrant per-query)
   fetch_all.py               Fetch from all sources
 generate_sample_data.py    Generates fake data for development
-schema.json                Output schema for data/packages.json
+schema.json                Output schema
 pyproject.toml             Python project config
-data/packages.json         Generated data (git-ignored)
+data/packages.json         Served copy for frontend (git-ignored)
+
+Cache (~/.cache/orphan/):
+  packages_raw.json          UDD + descriptions (source of truth)
+  packages.json              Built output (source of truth)
+  *_versions.json            Comparison caches (arch, freebsd, homebrew, pkgsrc, repology)
+  sid_*_Packages.xz          Debian binary package indexes
 ```
 
 ## License

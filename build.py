@@ -2,9 +2,9 @@
 """Merge UDD data with version comparisons into a single precomputed JSON.
 
 Usage:
-    python fetch_data.py              # fetch UDD data -> data/packages_raw.json
-    python -m comparisons.fetch_all   # fetch all sources -> data/*_versions.json
-    python build.py                   # merge + precompute -> data/packages.json
+    python fetch_data.py              # fetch UDD data -> ~/.cache/orphan/packages_raw.json
+    python -m comparisons.fetch_all   # fetch all sources -> ~/.cache/orphan/*_versions.json
+    python build.py                   # merge + precompute -> ~/.cache/orphan/packages.json
 
 The output schema is documented in schema.json.
 """
