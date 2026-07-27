@@ -10,6 +10,7 @@ The output schema is documented in schema.json.
 """
 
 import json
+import shutil
 import sys
 
 from comparisons import parse_debian_upstream, to_semver, compute_version_delta, CACHE_DIR
@@ -132,10 +133,16 @@ def build():
         "maintainers": maintainers,
     }
 
-    with open("data/packages.json", "w") as f:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = CACHE_DIR / "packages.json"
+    with open(output_path, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print(f"\nWrote {len(packages)} packages to data/packages.json", file=sys.stderr)
+    # Also write to data/ for the frontend to serve
+    import shutil
+    shutil.copy2(output_path, "data/packages.json")
+
+    print(f"\nWrote {len(packages)} packages to {output_path}", file=sys.stderr)
     print(f"  Behind upstream (any source): {stats['behind_any']}", file=sys.stderr)
     print(f"  Same / not found:             {stats['same_all']}", file=sys.stderr)
 
