@@ -28,6 +28,7 @@ class HomebrewSource(ComparisonSource):
             if name and version:
                 packages[name] = version
 
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = f"{cache_dir}/homebrew_versions.json"
         with open(cache_path, "w") as f:
             json.dump({"homebrew_packages": packages}, f, separators=(",", ":"))
@@ -35,7 +36,8 @@ class HomebrewSource(ComparisonSource):
         print(f"  Total: {len(packages)} packages", flush=True)
         return packages
 
-    def load_cache(self, cache_dir="data"):
+    def load_cache(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         try:
             with open(f"{cache_dir}/homebrew_versions.json") as f:
                 return json.load(f).get("homebrew_packages", {})

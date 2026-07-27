@@ -14,7 +14,8 @@ class PkgsrcSource(ComparisonSource):
     name = "pkgsrc"
     slug = "pkgsrc"
 
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         print(f"  Fetching {INDEX_URL}...", flush=True)
         req = urllib.request.Request(INDEX_URL, headers={"User-Agent": "debian-neglect-explorer/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -31,6 +32,7 @@ class PkgsrcSource(ComparisonSource):
                 ver = re.sub(r"nb\d+$", "", ver)
                 packages[name] = ver
 
+        cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = f"{cache_dir}/pkgsrc_versions.json"
         with open(cache_path, "w") as f:
             json.dump({"pkgsrc_packages": packages}, f, separators=(",", ":"))
@@ -38,7 +40,8 @@ class PkgsrcSource(ComparisonSource):
         print(f"  Total: {len(packages)} packages", flush=True)
         return packages
 
-    def load_cache(self, cache_dir="data"):
+    def load_cache(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         try:
             with open(f"{cache_dir}/pkgsrc_versions.json") as f:
                 return json.load(f).get("pkgsrc_packages", {})

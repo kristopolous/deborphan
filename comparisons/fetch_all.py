@@ -17,6 +17,7 @@ from comparisons.freebsd import FreebsdSource
 from comparisons.homebrew import HomebrewSource
 from comparisons.pkgsrc import PkgsrcSource
 from comparisons.repology import RepologySource
+from comparisons import CACHE_DIR
 
 
 BULK_SOURCES = [
@@ -43,7 +44,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch version data from comparison sources")
     parser.add_argument("--sources", nargs="*", help="Specific sources to fetch (default: all bulk sources)")
     parser.add_argument("--list", action="store_true", help="List available sources")
-    parser.add_argument("--cache-dir", default="data", help="Cache directory (default: data)")
+    parser.add_argument("--cache-dir", default=str(CACHE_DIR), help="Cache directory (default: ~/.cache/orphan/)")
     parser.add_argument("--limit", type=int, default=None, help="Limit Repology queries (default: all unmatched)")
     args = parser.parse_args()
 
@@ -87,7 +88,7 @@ def main():
     if run_repology:
         print(f"\nFetching {REPOLOGY.name}...", flush=True)
         try:
-            with open(f"{args.cache_dir}/packages_raw.json") as f:
+            with open(CACHE_DIR / "packages_raw.json") as f:
                 raw = json.load(f)
             REPOLOGY.fetch_incremental(
                 raw["packages"],

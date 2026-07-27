@@ -266,10 +266,12 @@ def main():
         "packages": rows,
     }
 
-    with open("data/packages_raw.json", "w") as f:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = CACHE_DIR / "packages_raw.json"
+    with open(output_path, "w") as f:
         json.dump(output, f, separators=(",", ":"))
 
-    print("Wrote data/packages_raw.json", file=sys.stderr)
+    print(f"Wrote {output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

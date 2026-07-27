@@ -58,27 +58,35 @@ All data sources are official, public, and reproducible. No ad-hoc HTTP requests
 
 ## Caching
 
-Raw downloaded files and comparison caches are stored separately:
+All caches live in `~/.cache/orphan/` (XDG cache directory). This avoids re-downloading
+~10MB of Packages.xz files and re-querying comparison sources on every run.
 
-### `~/.cache/orphan/` (downloaded mirror files)
-- **What**: Packages.xz files from `deb.debian.org`
-- **Files**: `sid_{component}_binary-amd64_Packages.xz` (one per component)
-- **Size**: ~11MB total (main ~10MB, contrib ~60KB, non-free ~130KB, non-free-firmware ~11KB)
-- **TTL**: 24 hours (re-downloaded if stale)
-- **Used by**: `fetch_data.py` — `_fetch_or_cached()` handles download and caching
-- **Purpose**: Avoid re-downloading ~10MB compressed files on every run
+### Files in `~/.cache/orphan/`
 
-### `data/` (version comparison caches)
-- **What**: Pre-fetched version data from upstream sources
-- **Files**:
-  - `arch_versions.json` — Arch Linux package versions (~15k packages)
-  - `freebsd_versions.json` — FreeBSD Ports package versions (~38k packages)
-  - `homebrew_versions.json` — Homebrew formula versions (~8.5k packages)
-  - `pkgsrc_versions.json` — pkgsrc/NetBSD package versions (~20k packages)
-  - `repology_versions.json` — Repology per-project versions (~11k packages, re-entrant)
-- **TTL**: No automatic expiry — re-fetched manually via `python -m comparisons.fetch_all`
-- **Used by**: `comparisons/*.py` — each source has `fetch()` and `load_cache()` methods
-- **Note**: `repology_versions.json` is re-entrant — saves every 50 queries and skips already-cached packages on resume. Use `--no-resume` to wipe and start fresh.
+| File | Source | Content | Size |
+|------|--------|---------|------|
+| `sid_main_binary-amd64_Packages.xz` | deb.debian.org | Binary packages (main) | ~10MB |
+| `sid_contrib_binary-amd64_Packages.xz` | deb.debian.org | Binary packages (contrib) | ~60KB |
+| `sid_non-free_binary-amd64_Packages.xz` | deb.debian.org | Binary packages (non-free) | ~130KB |
+| `sid_non-free-firmware_binary-amd64_Packages.xz` | deb.debian.org | Binary packages (non-free-firmware) | ~11KB |
+| `arch_versions.json` | mirror.rackspace.com | Arch Linux package versions | ~400KB |
+| `freebsd_versions.json` | download.freebsd.org | FreeBSD Ports package versions | ~1MB |
+| `homebrew_versions.json` | formulae.brew.sh | Homebrew formula versions | ~160KB |
+| `pkgsrc_versions.json` | ftp.NetBSD.org | pkgsrc/NetBSD package versions | ~460KB |
+| `repology_versions.json` | repology.org | Repology per-project versions (re-entrant) | varies |
+
+### TTL and behaviour
+
+- **Packages.xz files**: 24-hour TTL, re-downloaded automatically if stale. Falls back to stale cache on network error.
+- **Version comparison caches**: No automatic expiry. Re-fetched manually via `python -m comparisons.fetch_all`.
+- **Repology cache**: Re-entrant — saves every 50 queries, skips already-cached packages on resume. Use `--no-resume` to wipe and start fresh.
+
+### Where the cache is used
+
+- `fetch_data.py` — `_fetch_or_cached()` downloads and caches Packages.xz files
+- `comparisons/*.py` — each source's `fetch()` writes to cache, `load_cache()` reads from it
+- `comparisons/repology.py` — `fetch_incremental()` is re-entrant, `_save_cache()` writes incrementally
+- `build.py` — `source.load_cache(CACHE_DIR)` reads comparison caches to build final output
 
 ## Output
 

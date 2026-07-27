@@ -16,6 +16,7 @@ import re
 import sys
 import time
 import urllib.request
+from pathlib import Path
 from urllib.parse import quote
 
 INFO_URL = "https://repology.org/project/{name}/information"
@@ -119,11 +120,12 @@ class RepologySource(ComparisonSource):
     name = "Repology"
     slug = "repology"
 
-    def fetch(self, cache_dir="data"):
+    def fetch(self, cache_dir=None):
         """Not used directly — use fetch_incremental instead."""
         return self.load_cache(cache_dir)
 
-    def load_cache(self, cache_dir="data"):
+    def load_cache(self, cache_dir=None):
+        cache_dir = cache_dir or CACHE_DIR
         try:
             with open(f"{cache_dir}/repology_versions.json") as f:
                 return json.load(f).get("repology_packages", {})
@@ -269,16 +271,17 @@ class RepologySource(ComparisonSource):
                 return version
         return None
 
-    def fetch_incremental(self, packages_raw, cache_dir="data", limit=None, resume=True, check_none=False):
+    def fetch_incremental(self, packages_raw, cache_dir=None, limit=None, resume=True, check_none=False):
         """Query Repology for packages not yet cached, sorted by popularity.
 
         Args:
             packages_raw: list of package dicts from packages_raw.json
-            cache_dir: where to cache results
+            cache_dir: where to cache results (defaults to ~/.cache/orphan/)
             limit: max number of packages to query this run (None = all)
             resume: if True, skip packages already in cache
             check_none: if True, try fuzzy search for packages that returned None
         """
+        cache_dir = cache_dir or CACHE_DIR
         cache = self.load_cache(cache_dir) if resume else {}
         already_cached = set(cache.keys())
 
@@ -318,8 +321,8 @@ class RepologySource(ComparisonSource):
             version = self._query_project(name)
             matched_name = name if version else None
 
-            # Fuzzy fallback only if --check-none
-            if not version and check_none:
+            # Fuzzy fallback if exact match failed
+            if not version:
                 version, matched_name = self._search_fuzzy(name, homepage, description)
                 if version:
                     fuzzy += 1
@@ -346,7 +349,9 @@ class RepologySource(ComparisonSource):
         return cache
 
     def _save_cache(self, cache, cache_dir):
-        path = f"{cache_dir}/repology_versions.json"
+        cache_dir = Path(cache_dir) if not isinstance(cache_dir, Path) else cache_dir
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        path = cache_dir / "repology_versions.json"
         with open(path, "w") as f:
             json.dump({"repology_packages": cache}, f, separators=(",", ":"))
 
@@ -407,10 +412,10 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Max packages to query this run")
     parser.add_argument("--no-resume", action="store_true", help="Clear cache and start fresh")
     parser.add_argument("--check-none", action="store_true", help="Try fuzzy search for packages that returned None")
-    parser.add_argument("--cache-dir", default="data", help="Cache directory")
+    parser.add_argument("--cache-dir", default=str(CACHE_DIR), help="Cache directory (default: ~/.cache/orphan/)")
     args = parser.parse_args()
 
-    with open(f"{args.cache_dir}/packages_raw.json") as f:
+    with open(CACHE_DIR / "packages_raw.json") as f:
         raw = json.load(f)
 
     source = RepologySource()

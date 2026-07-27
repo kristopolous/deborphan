@@ -12,7 +12,7 @@ The output schema is documented in schema.json.
 import json
 import sys
 
-from comparisons import parse_debian_upstream, to_semver, compute_version_delta
+from comparisons import parse_debian_upstream, to_semver, compute_version_delta, CACHE_DIR
 from comparisons.arch import ArchSource
 from comparisons.freebsd import FreebsdSource
 from comparisons.homebrew import HomebrewSource
@@ -24,13 +24,13 @@ SOURCES = [ArchSource(), FreebsdSource(), HomebrewSource(), PkgsrcSource(), Repo
 
 
 def build():
-    with open("data/packages_raw.json") as f:
+    with open(CACHE_DIR / "packages_raw.json") as f:
         raw = json.load(f)
 
     # Load all available comparison caches
     source_data = {}
     for source in SOURCES:
-        data = source.load_cache()
+        data = source.load_cache(CACHE_DIR)
         if data:
             print(f"Loaded {source.name}: {len(data)} packages", file=sys.stderr)
             source_data[source.slug] = (source, data)
