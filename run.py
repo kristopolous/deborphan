@@ -15,6 +15,7 @@ Usage:
 import argparse
 import subprocess
 import sys
+from comparisons import CACHE_DIR
 
 
 def run(cmd, label=None):
@@ -50,6 +51,7 @@ commands:
 """,
     )
     parser.add_argument("command", nargs="?", default="fetch", help="Command to run (default: fetch)")
+    parser.add_argument("--cache-dir", default=str(CACHE_DIR), help="Cache directory (default: ~/.cache/orphan/)")
 
     # fetch args
     fetch_parser = argparse.ArgumentParser(add_help=False)
@@ -66,20 +68,21 @@ commands:
     serve_parser.add_argument("--port", type=int, default=8080, help="Port (default: 8080)")
 
     sub, _ = parser.parse_known_args()
+    cache_dir = sub.cache_dir
 
     if sub.command == "fetch":
         args = fetch_parser.parse_args(sys.argv[2:])
         if not args.no_udd:
             run(f"{python} fetch_data.py", "Fetching Debian data from UDD")
         sources = f" --sources {' '.join(args.sources)}" if args.sources else ""
-        run(f"{python} -m comparisons.fetch_all{sources}", "Fetching comparison sources")
+        run(f"{python} -m comparisons.fetch_all{sources} --cache-dir {cache_dir}", "Fetching comparison sources")
 
     elif sub.command == "build":
         run(f"{python} build.py", "Building data/packages.json")
 
     elif sub.command == "repology":
         args = repology_parser.parse_args(sys.argv[2:])
-        cmd = f"{python} -m comparisons.repology"
+        cmd = f"{python} -m comparisons.repology --cache-dir {cache_dir}"
         if args.limit:
             cmd += f" --limit {args.limit}"
         if args.no_resume:
