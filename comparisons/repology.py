@@ -193,44 +193,41 @@ class RepologySource(ComparisonSource):
                 summary = entry.get("summary", "")
                 break
 
-        # Acceptance logic:
-        # - normalized names match exactly: auto-accept
-        # - dist == 1 AND one is prefix of the other: auto-accept
-        #   (e.g. lme -> lme4, c-lolcat -> lolcat)
-        # - dist > 1: require homepage cross-check AND both summaries
-        # - everything else: reject
+        # Acceptance logic: DEFAULT REJECT. Only accept when ALL conditions met.
         best_name_norm = _normalize_repology_name(best_name)
-        is_prefix = best_name_norm.startswith(name_norm) or name_norm.startswith(best_name_norm)
-        if name_norm == best_name_norm:
+        accepted = False
+        reject_reason = None
+
+        # Check: both summaries must be non-null and non-empty
+        has_debian_desc = bool(description and description.strip())
+        has_repology_summary = bool(summary and summary.strip())
+
+        if not has_debian_desc:
+            reject_reason = f"No Debian description for '{name}'"
+        elif not has_repology_summary:
+            reject_reason = f"No Repology summary for '{best_name}'"
+        elif name_norm == best_name_norm:
+            # Exact normalized match with both summaries — accept
             accepted = True
-        elif best_dist == 1 and is_prefix:
+        elif best_dist == 1:
+            # Close match with both summaries — accept
             accepted = True
         elif best_dist > 1 and homepage:
-            # Fetch Repology project homepages and compare
+            # Distant match — require homepage cross-check
             rep_homepages = _fetch_repology_homepages(best_name)
             hp = _strip_homepage(homepage)
             if hp and rep_homepages:
-                # Accept only if homepages overlap
-                accepted = hp in rep_homepages
-                if not accepted:
-                    print(f"      Homepage mismatch: Debian '{hp}' not in Repology {rep_homepages}")
+                if hp in rep_homepages:
+                    accepted = True
+                else:
+                    reject_reason = f"Homepage mismatch: Debian '{hp}' not in Repology {rep_homepages}"
             else:
-                # Can't cross-check — reject
-                accepted = False
-                if not rep_homepages:
-                    print(f"      No Repology homepages found for '{best_name}'")
+                reject_reason = f"No Repology homepages found for '{best_name}'"
         else:
-            # No Debian homepage — can't cross-check — reject
-            accepted = False
+            reject_reason = f"Dist={best_dist}, no homepage to cross-check"
 
-        # Require both summaries for dist > 1 (cross-check validation)
-        if accepted and best_dist > 1:
-            if not description or not summary:
-                accepted = False
-                if not description:
-                    print(f"      No Debian description for '{name}'")
-                if not summary:
-                    print(f"      No Repology summary for '{best_name}'")
+        if not accepted and reject_reason:
+            print(f"      REJECT reason: {reject_reason}")
 
         tag = "ACCEPTED" if accepted else "REJECTED"
         print(f"    FUZZY {tag}: '{name}' -> '{best_name}' (dist={best_dist})")
