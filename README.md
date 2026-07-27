@@ -33,7 +33,7 @@ python3 -m http.server 8080
 # Skip UDD, just refresh comparison sources
 .venv/bin/python run.py fetch --no-udd
 
-# Build final data/packages.json from cached data
+# Build final packages.json from cached data
 .venv/bin/python run.py build
 
 # Query Repology (re-entrant, sorted by popularity)
@@ -52,7 +52,7 @@ python3 -m http.server 8080
 .venv/bin/python run.py serve --port 3000
 ```
 
-Requires `psql` (PostgreSQL client) for UDD fetch. The pipeline produces `data/packages.json` with all fields precomputed. Schema is documented in `schema.json`.
+Requires `psql` (PostgreSQL client) for UDD fetch. The pipeline produces `packages.json` with all fields precomputed (stored in `~/.cache/orphan/`, copied to `data/` for the frontend). Schema is documented in `schema.json`.
 
 ### Comparison Sources
 
