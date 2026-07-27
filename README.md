@@ -65,11 +65,12 @@ The pipeline compares Debian versions against multiple external sources to find 
 | pkgsrc | ~20k | NetBSD package collection |
 | Repology | per-query | Aggregates nix, Void, Fedora rawhide, openSUSE Tumbleweed, Chimera, Alpine edge, Gentoo, Slackware, OpenBSD, etc. |
 
-Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume:
+Bulk sources (Arch, FreeBSD, Homebrew, pkgsrc) are fetched via direct downloads. Repology is queried per-package (sorted by popularity) — re-entrant, so you can stop/resume. Packages not found on Repology (404) or with only `rolling`-status versions (immutable snapshots, not tracked versions) are cached as `null` to avoid re-querying them on subsequent runs.
 
 ```bash
 .venv/bin/python run.py fetch --sources arch   # Arch only
 .venv/bin/python run.py repology --limit 500   # Repology top 500
+.venv/bin/python run.py repology --no-resume   # wipe cache, start fresh
 ```
 
 ## How It Works

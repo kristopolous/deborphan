@@ -55,7 +55,15 @@ class RepologySource(ComparisonSource):
             return {}
 
     def _query_project(self, name):
-        """Query Repology for a single project. Returns best version from fast repos."""
+        """Query Repology for a single project.
+
+        Returns the best version string from fast repos, or None if:
+        - Package not found on Repology (404)
+        - All matching versions have status "rolling" (immutable snapshots, not tracked)
+        - Network error / timeout
+
+        None results are cached to avoid re-querying on resume.
+        """
         url = API_URL.format(name=name)
         req = urllib.request.Request(url, headers={"User-Agent": "debian-neglect-explorer/1.0"})
         try:
@@ -115,8 +123,8 @@ class RepologySource(ComparisonSource):
             version = self._query_project(name)
             queried += 1
 
+            cache[name] = version  # cache None too (negative cache)
             if version:
-                cache[name] = version
                 found += 1
 
             if (i + 1) % 50 == 0:
